@@ -1,5 +1,8 @@
 #include <RadioLib.h>
 
+//modulos locales
+#include "oled_rtc.h"
+
 // Pines correctos para el conector B2B del XIAO ESP32-S3 + Wio LoRa
 const int PIN_CS    = 41;
 const int PIN_DIO1  = 39;
@@ -12,13 +15,16 @@ SX1262 radio = new Module(PIN_CS, PIN_DIO1, PIN_RESET, PIN_BUSY);
 void setup() {
   Serial.begin(115200);
   
-  // ¡ESTA LÍNEA ES LA MAGIA PARA EL ESP32-S3!
-  // El código se quedará congelado aquí hasta que abras el Monitor Serie.
   while (!Serial) {
     delay(10);
   }
   
   Serial.println("\n--- INICIANDO TEST LORA ---");
+  
+  // --- AQUÍ LLAMAS A TU MÓDULO ---
+  Serial.println("Inicializando modulo OLED/RTC...");
+  inicializarPantallaRTC(); 
+
   Serial.println("[LoRa] Configurando hardware...");
 
   // Inicialización (915MHz)
@@ -34,6 +40,9 @@ void setup() {
 }
 
 void loop() {
+  // --- AQUÍ ACTUALIZAS LA PANTALLA ---
+  actualizarPantallaRTC();
+
   Serial.println("[LoRa] Enviando paquete de prueba...");
   
   int state = radio.transmit("Test LoRa S3!");
