@@ -1,63 +1,51 @@
 #include "oled_rtc.h"
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET    -1 
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// Constructor para pantallas SH1106 I2C 128x64
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 RTC_DS3231 rtc;
 
 void inicializarPantallaRTC() {
+  Serial.println("[CPP] -> Iniciando bus I2C...");
   Wire.begin(D4, D5);
 
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("Error: No se pudo inicializar la OLED"));
-  }
-  
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
+  Serial.println("[CPP] -> Iniciando pantalla SH1106...");
+  u8g2.begin();
+  u8g2.clearBuffer(); // Limpia la memoria estática
+  u8g2.sendBuffer();
 
+  Serial.println("[CPP] -> Iniciando modulo RTC...");
   if (!rtc.begin()) {
-    Serial.println("Error: No se encontró el módulo RTC");
-  }
-
-  if (rtc.lostPower()) {
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    Serial.println("[CPP] -> ERROR: No se encontro el modulo RTC");
+  } else {
+    Serial.println("[CPP] -> EXITO: RTC detectado");
+    if (rtc.lostPower()) {
+      Serial.println("[CPP] -> Ajustando hora RTC...");
+      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    }
   }
 }
 
 void actualizarPantallaRTC() {
   DateTime now = rtc.now();
-  display.clearDisplay();
-  
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("Monitor de Heladera");
-  display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
-  
-  display.setCursor(0, 18);
-  display.print("Fecha: ");
-  if (now.day() < 10) display.print('0');
-  display.print(now.day(), DEC);
-  display.print('/');
-  if (now.month() < 10) display.print('0');
-  display.print(now.month(), DEC);
-  display.print('/');
-  display.print(now.year(), DEC);
 
-  display.setTextSize(2);
-  display.setCursor(15, 38);
-  
-  if (now.hour() < 10) display.print('0');
-  display.print(now.hour(), DEC);
-  display.print(':');
-  
-  if (now.minute() < 10) display.print('0');
-  display.print(now.minute(), DEC);
-  display.print(':');
-  
-  if (now.second() < 10) display.print('0');
-  display.println(now.second(), DEC);
+  u8g2.clearBuffer();
 
-  display.display();
+  // Título
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(0, 10, "Monitor de Heladera");
+  u8g2.drawHLine(0, 13, 128);
+
+  // Fecha
+  char bufferFecha[20];
+  snprintf(bufferFecha, sizeof(bufferFecha), "Fecha: %02d/%02d/%04d", now.day(), now.month(), now.year());
+  u8g2.drawStr(0, 28, bufferFecha);
+
+  // Hora (Fuente más grande)
+  u8g2.setFont(u8g2_font_logisoso16_tf);
+  char bufferHora[15];
+  snprintf(bufferHora, sizeof(bufferHora), "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  u8g2.drawStr(15, 55, bufferHora);
+
+  // Envía todo el fotograma completo a la pantalla
+  u8g2.sendBuffer();
 }
