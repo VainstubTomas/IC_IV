@@ -1,7 +1,8 @@
 #include <RadioLib.h>
 
-//modulos locales
+// modulos locales
 #include "oled_rtc.h"
+#include "temp_sensor.h" // agregada la sonda
 
 // Pines correctos para el conector B2B del XIAO ESP32-S3 + Wio LoRa
 const int PIN_CS    = 41;
@@ -9,12 +10,11 @@ const int PIN_DIO1  = 39;
 const int PIN_RESET = 42;
 const int PIN_BUSY  = 40;
 
-// Instanciar el módulo SX1262
 SX1262 radio = new Module(PIN_CS, PIN_DIO1, PIN_RESET, PIN_BUSY);
 
 // --- VARIABLES PARA MILLIS() ---
 unsigned long tiempoAnterior = 0;
-const unsigned long intervaloLoRa = 5000; // 5000 milisegundos = 5 segundos
+const unsigned long intervaloLoRa = 5000; 
 
 void setup() {
   Serial.begin(115200);
@@ -26,12 +26,12 @@ void setup() {
   Serial.println("\n--- INICIANDO TEST LORA ---");
   
   Serial.println("Inicializando modulo OLED/RTC...");
-  // Inicializamos la pantalla y el RTC, que internamente usa Wire.begin(D4, D5)
   inicializarPantallaRTC(); 
 
-  Serial.println("[LoRa] Configurando hardware...");
+  // iniciar la sonda de temperatura
+  inicializarTemperatura();
 
-  // Inicialización (915MHz)
+  Serial.println("[LoRa] Configurando hardware...");
   int state = radio.begin(915.0, 125.0, 9, 7, 18, 10, 8, 1.6, false);
 
   if (state == RADIOLIB_ERR_NONE) {
@@ -39,23 +39,31 @@ void setup() {
   } else {
     Serial.print("[LoRa] Fallo de inicio. Codigo de error: ");
     Serial.println(state);
-    while (true); // Detener ejecución
+    while (true); 
   }
 }
 
 void loop() {
-  // 1. Actualizamos la pantalla en cada ciclo (no se bloquea)
-  actualizarPantallaRTC();
+  // 1. lee la temperatura
+  leerTemperatura();
 
-  // 2. Control de tiempo sin frenar el microcontrolador
+  // 2. actualizamos la pantalla pasandole el valor
+  actualizarPantallaRTC(temperaturaActual);
+
+  // 3. control de tiempo y transmisión LoRa sin frenar el micro
   unsigned long tiempoActual = millis();
   
   if (tiempoActual - tiempoAnterior >= intervaloLoRa) {
-    // Guardamos el momento de este envío para calcular el próximo
     tiempoAnterior = tiempoActual; 
 
-    Serial.println("[LoRa] Enviando paquete de prueba...");
-    int state = radio.transmit("Test LoRa S3!");
+    // Armamos un payload simple con la temperatura
+    char payload[32];
+    snprintf(payload, sizeof(payload), "Heladera1:%.2f", temperaturaActual);
+
+    Serial.print("[LoRa] Enviando paquete: ");
+    Serial.println(payload);
+    
+    int state = radio.transmit(payload);
 
     if (state == RADIOLIB_ERR_NONE) {
       Serial.println("[LoRa] Transmision OK!");

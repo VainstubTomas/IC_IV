@@ -25,27 +25,39 @@ void inicializarPantallaRTC() {
   }
 }
 
-void actualizarPantallaRTC() {
+void actualizarPantallaRTC(float temp) {
   DateTime now = rtc.now();
 
   u8g2.clearBuffer();
 
-  // Título
+  // 1. Título
   u8g2.setFont(u8g2_font_6x10_tf);
   u8g2.drawStr(0, 10, "Monitor de Heladera");
   u8g2.drawHLine(0, 13, 128);
 
-  // Fecha
+  // 2. Fecha
   char bufferFecha[20];
   snprintf(bufferFecha, sizeof(bufferFecha), "Fecha: %02d/%02d/%04d", now.day(), now.month(), now.year());
-  u8g2.drawStr(0, 28, bufferFecha);
+  u8g2.drawStr(0, 24, bufferFecha);
 
-  // Hora (Fuente más grande)
+  // 3. Hora
   u8g2.setFont(u8g2_font_logisoso16_tf);
   char bufferHora[15];
   snprintf(bufferHora, sizeof(bufferHora), "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
-  u8g2.drawStr(15, 55, bufferHora);
+  u8g2.drawStr(15, 44, bufferHora);
 
+  // 4. Temperatura
+  u8g2.setFont(u8g2_font_6x10_tf);
+  char bufferTemp[20];
+  
+  if (temp <= -100.0) {
+      snprintf(bufferTemp, sizeof(bufferTemp), "Temp: Error sensor");
+  } else {
+      snprintf(bufferTemp, sizeof(bufferTemp), "Temp: %.1f C", temp);
+  }
+  
+  u8g2.drawStr(0, 60, bufferTemp); 
+  
   // Envía todo el fotograma completo a la pantalla
   u8g2.sendBuffer();
 }

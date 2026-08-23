@@ -7,6 +7,6 @@
 #include "RTClib.h"
 
 void inicializarPantallaRTC();
-void actualizarPantallaRTC();
+void actualizarPantallaRTC(float temp);
 
 #endif
