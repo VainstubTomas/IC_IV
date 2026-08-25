@@ -1,0 +1,1 @@
+// centralización servidor backend (HTTP + WS + MQTT + BD)
