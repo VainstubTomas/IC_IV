@@ -1,13 +1,10 @@
 import mqtt from "mqtt";
 import fs from "fs";
-import config from "../config";
-import { TOPICS } from "./mqtt-topics";
+import config from "../config.js";
+import { TOPICS } from "./mqtt-topics.js";
 
 // broker config
 const MQTTBROKERURL = config.MQTTBROKERURL;
-
-// broker auth certificate
-const CA = fs.readFileSync(config.MQTTBROKERCAPATH);
 
 // mqtt client
 let client = null;
@@ -18,6 +15,9 @@ let client = null;
  */
 
 function init(io) {
+    // broker auth certificate
+    const CA = fs.readFileSync(config.MQTTBROKERCAPATH);
+
     if(client) return;
 
     client = mqtt.connect(MQTTBROKERURL, {
