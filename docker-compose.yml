@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # BROKER MQTT (Eclipse Mosquitto)
+  # ============================================================================
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: iciv_mosquitto_broker
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # Puerto estándar MQTT TCP (ESP32 y Backend Node.js)
+      - "9001:9001"   # Puerto MQTT WebSockets (Frontend / Dashboards Web)
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - iciv-network
+
+  # ============================================================================
+  # BASE DE DATOS (MongoDB para Mongoose Backend)
+  # ============================================================================
+  mongodb:
+    image: mongo:7.0
+    container_name: iciv_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"  # Puerto estándar MongoDB
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - iciv-network
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  iciv-network:
+    driver: bridge

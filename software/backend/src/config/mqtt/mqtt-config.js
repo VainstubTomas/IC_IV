@@ -15,17 +15,22 @@ let client = null;
  */
 
 function init(io) {
-    // broker auth certificate
-    const CA = fs.readFileSync(config.MQTTBROKERCAPATH);
-
     if(client) return;
 
-    client = mqtt.connect(MQTTBROKERURL, {
-        username: config.BROKERUSERNAME,
-        password: config.BROKERPASSW,
-        clean: true,
-        ca: CA
-    });
+    // Opciones de conexión MQTT
+    const mqttOptions = {
+        clean: true
+    };
+
+    if (config.BROKERUSERNAME) mqttOptions.username = config.BROKERUSERNAME;
+    if (config.BROKERPASSW) mqttOptions.password = config.BROKERPASSW;
+
+    // Solo cargar certificado CA si está definido y el archivo existe
+    if (config.MQTTBROKERCAPATH && fs.existsSync(config.MQTTBROKERCAPATH)) {
+        mqttOptions.ca = fs.readFileSync(config.MQTTBROKERCAPATH);
+    }
+
+    client = mqtt.connect(MQTTBROKERURL, mqttOptions);
 
     // drive connection
     client.on("connect", () => {
@@ -52,17 +57,25 @@ function init(io) {
         }
     });
 
-    // messages reception (gateway mqtt -> socket.io)
-    client.on('message', (topic, message) => {
+    // messages reception (gateway mqtt -> socket.io + MongoDB persistence)
+    client.on('message', async (topic, message) => {
         try {
             const payload = message.toString();
             
             // Log of receipted data
             console.log(`[mqtt-config] Tópico: ${topic}, Payload: ${payload}`);
 
+            let savedData = null;
+            try {
+                const { default: sensorDataService } = await import('../../services/sensor-data-service.js');
+                savedData = await sensorDataService.parseAndSaveMqttMessage(topic, payload);
+            } catch (serviceErr) {
+                console.error('[mqtt-config] Error al persistir mensaje MQTT en DB:', serviceErr.message);
+            }
+
             // io propagation - send to all web connected clients
             if (io) {
-                io.emit('mqtt_update', { topic, payload });
+                io.emit('mqtt_update', { topic, payload, data: savedData });
             }
 
         } catch (e) {

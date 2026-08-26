@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telemetría Industrial - Heladera IoT</title>
+  <style>
+    /* ==========================================================================
+       VARIABLES Y TEMA INDUSTRIAL DARK
+       ========================================================================== */
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-card: #1a2234;
+      --bg-card-hover: #222d44;
+      --border-color: #2e3a52;
+      --border-accent: #3b82f6;
+
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --text-muted: #64748b;
+
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+
+      --led-glow-green: 0 0 10px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
+      --led-glow-amber: 0 0 10px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.4);
+
+      --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* ==========================================================================
+       HEADER & BARRA DE ESTADO
+       ========================================================================== */
+    header {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #0e7490, #1e3a8a);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      color: #fff;
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-primary);
+    }
+
+    .brand-text .hardware-spec {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .badge-chip {
+      background: rgba(6, 182, 212, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .status-panel {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 0.9rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .led-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--accent-emerald);
+      box-shadow: var(--led-glow-green);
+      transition: all 0.3s ease;
+    }
+
+    .led-indicator.simulation {
+      background-color: var(--accent-amber);
+      box-shadow: var(--led-glow-amber);
+      animation: pulse-amber 2s infinite;
+    }
+
+    .led-indicator.connected {
+      background-color: var(--accent-emerald);
+      box-shadow: var(--led-glow-green);
+      animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.9); }
+    }
+
+    @keyframes pulse-amber {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
+
+    /* ==========================================================================
+       GRID DE TARJETAS DE TELEMETRÍA (CSS GRID)
+       ========================================================================== */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-accent);
+      transform: translateY(-2px);
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--card-accent, var(--accent-cyan));
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-icon {
+      font-size: 1.1rem;
+    }
+
+    .card-tag {
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    .card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .metric-value-container {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .metric-value {
+      font-family: var(--font-mono);
+      font-size: 3rem;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--text-primary);
+    }
+
+    .metric-unit {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .metric-status-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
+    }
+
+    /* Gráfico de barras RSSI */
+    .rssi-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 20px;
+    }
+
+    .rssi-bar {
+      width: 6px;
+      background: var(--border-color);
+      border-radius: 2px;
+      transition: background-color 0.3s ease;
+    }
+
+    .rssi-bar.active {
+      background: var(--accent-cyan);
+    }
+
+    .rssi-bar:nth-child(1) { height: 6px; }
+    .rssi-bar:nth-child(2) { height: 10px; }
+    .rssi-bar:nth-child(3) { height: 14px; }
+    .rssi-bar:nth-child(4) { height: 18px; }
+
+    /* Indicador térmico */
+    .temp-range-bar {
+      width: 100%;
+      height: 6px;
+      background: linear-gradient(90deg, #3b82f6 0%, #10b981 40%, #10b981 60%, #f59e0b 80%, #f43f5e 100%);
+      border-radius: 3px;
+      position: relative;
+      margin-top: 0.5rem;
+    }
+
+    .temp-marker {
+      position: absolute;
+      top: -3px;
+      width: 12px;
+      height: 12px;
+      background: #ffffff;
+      border: 2px solid var(--bg-primary);
+      border-radius: 50%;
+      transform: translateX(-50%);
+      transition: left 0.5s ease;
+    }
+
+    /* ==========================================================================
+       BARRA DE ACCIONES Y CONTROLES
+       ========================================================================== */
+    .actions-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .polling-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .polling-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .btn-action {
+      background: linear-gradient(135deg, #1e40af, #2563eb);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 0.75rem 1.4rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+    }
+
+    .btn-action:hover:not(:disabled) {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.5);
+    }
+
+    .btn-action:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-action:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-action .btn-spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .btn-action.loading .btn-spinner {
+      display: inline-block;
+    }
+
+    /* ==========================================================================
+       TOAST DE NOTIFICACIONES & LOGS
+       ========================================================================== */
+    .toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border-left: 4px solid var(--accent-cyan);
+      border-top: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.85rem 1.25rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      animation: slide-in 0.3s ease forwards;
+      pointer-events: auto;
+    }
+
+    .toast.success { border-left-color: var(--accent-emerald); }
+    .toast.warning { border-left-color: var(--accent-amber); }
+    .toast.info { border-left-color: var(--accent-cyan); }
+
+    @keyframes slide-in {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ==========================================================================
+       FOOTER
+       ========================================================================== */
+    footer {
+      margin-top: auto;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      .metric-value {
+        font-size: 2.5rem;
+      }
+      .actions-panel, header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .status-panel {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .btn-action {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- HEADER -->
+    <header>
+      <div class="brand-section">
+        <div class="brand-icon">❄️</div>
+        <div class="brand-text">
+          <h1>Telemetría de Refrigeración Industrial</h1>
+          <div class="hardware-spec">
+            <span class="badge-chip">XIAO ESP32-S3</span>
+            <span class="badge-chip">LoRa SX1262</span>
+            <span>DS18B20 + RTC</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-panel">
+        <div class="connection-status" id="statusBox">
+          <div class="led-indicator simulation" id="statusLed"></div>
+          <span id="statusText">Modo Simulación (Offline)</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- GRID DE TARJETAS PRINCIPALES (3 VARIABLES) -->
+    <main class="dashboard-grid">
+      
+      <!-- TARJETA 1: TEMPERATURA -->
+      <article class="card" style="--card-accent: var(--accent-cyan);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">🌡️</span> Temperatura Interna
+          </span>
+          <span class="card-tag">DS18B20 1-Wire</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="tempValue">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="temp-range-bar">
+            <div class="temp-marker" id="tempMarker" style="left: 50%;"></div>
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span style="color: var(--text-secondary);">Rango recomendado: 2.0°C - 6.0°C</span>
+          <span class="badge-chip" id="tempStatusBadge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border-color: rgba(16, 185, 129, 0.3);">NORMAL</span>
+        </div>
+      </article>
+
+      <!-- TARJETA 2: SEÑAL LORA RSSI -->
+      <article class="card" style="--card-accent: var(--accent-emerald);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">📡</span> Nivel de Señal LoRa
+          </span>
+          <span class="card-tag">SX1262 RSSI</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="rssiValue">---</span>
+            <span class="metric-unit">dBm</span>
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span id="rssiQualityText" style="color: var(--text-secondary);">Enlace Estable</span>
+          <div class="rssi-bars" id="rssiBars">
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- TARJETA 3: TIMESTAMP RTC -->
+      <article class="card" style="--card-accent: var(--accent-amber);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">⏱️</span> Última Lectura
+          </span>
+          <span class="card-tag">RTC Hardware</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="timeValue" style="font-size: 1.85rem; letter-spacing: -0.5px;">--:--:--</span>
+          </div>
+          <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);" id="dateValue">
+            ----/--/--
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span style="color: var(--text-secondary);">Frecuencia de muestreo</span>
+          <span class="badge-chip" id="lastUpdatedBadge">5s polling</span>
+        </div>
+      </article>
+
+    </main>
+
+    <!-- BARRA DE ACCIONES Y CONTROLES -->
+    <section class="actions-panel">
+      <div class="polling-info">
+        <div class="polling-spinner"></div>
+        <span>Actualización automática activa cada <strong>5 segundos</strong></span>
+      </div>
+
+      <button type="button" class="btn-action" id="btnForceRead" onclick="forzarLectura()">
+        <span class="btn-spinner" id="btnSpinner"></span>
+        <span id="btnIcon">⚡</span>
+        <span id="btnText">Forzar lectura</span>
+      </button>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      Sistema de Monitoreo Edge IoT &bull; Placa XIAO ESP32-S3 &bull; Módulo LoRa SX1262 &bull; Interfaz Standalone Vanilla
+    </footer>
+
+  </div>
+
+  <!-- CONTENEDOR DE TOASTS -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ==========================================================================
+       LÓGICA JAVASCRIPT (VANILLA ASYNC)
+       ========================================================================== -->
+  <script>
+    // Variables de estado interno para simulación continua y coherente
+    let simulacionTemp = 3.8;
+    let simulacionRssi = -78;
+
+    /**
+     * Muestra una notificación visual no invasiva (Toast)
+     */
+    function mostrarToast(mensaje, tipo = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${tipo}`;
+      toast.textContent = mensaje;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(50px)';
+        setTimeout(() => toast.remove(), 400);
+      }, 3500);
+    }
+
+    /**
+     * Generador de datos simulados coherentes para una heladera
+     */
+    function generarDatosSimulados() {
+      // Simula ligera oscilación térmica típica entre 2.2°C y 5.8°C
+      const deltaTemp = (Math.random() - 0.48) * 0.3;
+      simulacionTemp = Math.max(1.8, Math.min(6.5, simulacionTemp + deltaTemp));
+
+      // Simula variación leve de RSSI LoRa entre -65 y -98 dBm
+      const deltaRssi = Math.round((Math.random() - 0.5) * 4);
+      simulacionRssi = Math.max(-105, Math.min(-60, simulacionRssi + deltaRssi));
+
+      // Timestamp local RTC
+      const ahora = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const fechaStr = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}`;
+      const horaStr = `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+
+      return {
+        temperatura: parseFloat(simulacionTemp.toFixed(1)),
+        rssi: simulacionRssi,
+        timestamp: `${fechaStr} ${horaStr}`,
+        fuente: 'mock'
+      };
+    }
+
+    /**
+     * Actualiza todos los elementos de la interfaz con el objeto de telemetría
+     */
+    function actualizarUI(datos, esReal) {
+      const { temperatura, rssi, timestamp } = datos;
+
+      // 1. Tarjeta Temperatura
+      const tempElem = document.getElementById('tempValue');
+      const tempMarker = document.getElementById('tempMarker');
+      const tempBadge = document.getElementById('tempStatusBadge');
+
+      tempElem.textContent = temperatura.toFixed(1);
+
+      // Calcular posición en barra de rango (0°C a 10°C)
+      const porcentajeTemp = Math.max(0, Math.min(100, (temperatura / 10) * 100));
+      tempMarker.style.left = `${porcentajeTemp}%`;
+
+      if (temperatura < 2.0) {
+        tempBadge.textContent = 'MUY FRÍO';
+        tempBadge.style.color = 'var(--accent-blue)';
+        tempBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+      } else if (temperatura <= 6.0) {
+        tempBadge.textContent = 'ÓPTIMO';
+        tempBadge.style.color = 'var(--accent-emerald)';
+        tempBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      } else {
+        tempBadge.textContent = 'ALERTA CALOR';
+        tempBadge.style.color = 'var(--accent-rose)';
+        tempBadge.style.background = 'rgba(244, 63, 94, 0.15)';
+      }
+
+      // 2. Tarjeta LoRa RSSI
+      const rssiElem = document.getElementById('rssiValue');
+      const qualityText = document.getElementById('rssiQualityText');
+      const bars = document.querySelectorAll('#rssiBars .rssi-bar');
+
+      rssiElem.textContent = rssi;
+
+      // Evaluar calidad de señal LoRa (típicamente -120 dBm a -50 dBm)
+      let activeBars = 1;
+      if (rssi >= -70) {
+        activeBars = 4;
+        qualityText.textContent = 'Excelente Cobertura';
+      } else if (rssi >= -85) {
+        activeBars = 3;
+        qualityText.textContent = 'Buena Señal';
+      } else if (rssi >= -100) {
+        activeBars = 2;
+        qualityText.textContent = 'Señal Moderada';
+      } else {
+        activeBars = 1;
+        qualityText.textContent = 'Señal Débil / Límite';
+      }
+
+      bars.forEach((bar, index) => {
+        if (index < activeBars) {
+          bar.classList.add('active');
+        } else {
+          bar.classList.remove('active');
+        }
+      });
+
+      // 3. Tarjeta Timestamp
+      const timeElem = document.getElementById('timeValue');
+      const dateElem = document.getElementById('dateValue');
+
+      if (timestamp) {
+        const partes = timestamp.split(' ');
+        if (partes.length === 2) {
+          dateElem.textContent = partes[0];
+          timeElem.textContent = partes[1];
+        } else {
+          timeElem.textContent = timestamp;
+          dateElem.textContent = 'RTC Sincronizado';
+        }
+      }
+
+      // 4. Indicador de Conexión
+      const statusLed = document.getElementById('statusLed');
+      const statusText = document.getElementById('statusText');
+
+      if (esReal) {
+        statusLed.className = 'led-indicator connected';
+        statusText.textContent = 'Conectado (/api/telemetria)';
+        statusText.style.color = 'var(--accent-emerald)';
+      } else {
+        statusLed.className = 'led-indicator simulation';
+        statusText.textContent = 'Modo Simulación (Offline)';
+        statusText.style.color = 'var(--accent-amber)';
+      }
+    }
+
+    /**
+     * Función principal de sondeo (polling) GET /api/telemetria cada 5s
+     */
+    async function obtenerTelemetria() {
+      try {
+        const respuesta = await fetch('/api/telemetria', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}: Fallo en endpoint de telemetría`);
+        }
+
+        const datos = await respuesta.json();
+        actualizarUI(datos, true);
+      } catch (error) {
+        // En caso de error o servidor no levantado, inyectar datos simulados coherentes
+        const datosMock = generarDatosSimulados();
+        actualizarUI(datosMock, false);
+      }
+    }
+
+    /**
+     * Forzar lectura manual mediante POST /api/leer
+     */
+    async function forzarLectura() {
+      const btn = document.getElementById('btnForceRead');
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+
+      // Estado de carga UI
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btnText.textContent = 'Solicitando...';
+      btnIcon.style.display = 'none';
+
+      try {
+        const respuesta = await fetch('/api/leer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ origen: 'dashboard_manual', trigger: 'force_read' })
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}`);
+        }
+
+        const resultado = await respuesta.json();
+        mostrarToast('¡Lectura forzada ejecutada correctamente!', 'success');
+        
+        // Si el backend devuelve inmediatamente la telemetría, actualizamos
+        if (resultado && resultado.telemetria) {
+          actualizarUI(resultado.telemetria, true);
+        } else {
+          await obtenerTelemetria();
+        }
+      } catch (error) {
+        // Fallback simulado cuando el endpoint no está disponible
+        const datosMock = generarDatosSimulados();
+        actualizarUI(datosMock, false);
+        mostrarToast('Simulación: Comando /api/leer ejecutado (Offline)', 'warning');
+      } finally {
+        // Restaurar estado del botón
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove('loading');
+          btnText.textContent = 'Forzar lectura';
+          btnIcon.style.display = 'inline';
+        }, 500);
+      }
+    }
+
+    // Inicializar lectura inmediata y configurar polling de 5 segundos
+    document.addEventListener('DOMContentLoaded', () => {
+      obtenerTelemetria();
+      setInterval(obtenerTelemetria, 5000);
+    });
+  </script>
+</body>
+</html>

@@ -1,2 +1,24 @@
+# Dependencias de Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno locales
 .env
-node_modules
+.env.local
+
+# Datos y logs de Mosquitto
+mosquitto/data/
+mosquitto/log/
+
+# Base de datos local
+*.sqlite
+*.sqlite3
+mongo-data/
+
+# Archivos de sistema operativo e IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
