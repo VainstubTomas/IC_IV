@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 
-// Middlewares globales
+// Middlewares
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -23,6 +23,4 @@ app.use(express.urlencoded({ extended: true }));
 const frontendPath = path.resolve(__dirname, '../../../frontend');
 app.use(express.static(frontendPath));
 
-// Rutas de API REST
 app.use('/api', apiRoutes);
-app.use('/', apiRoutes); // Alias directo para compatibilidad de rutas
