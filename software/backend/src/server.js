@@ -4,6 +4,7 @@ import config from './config/config.js';
 import { bdInit } from './config/db-connect-config.js';
 import { Server } from 'socket.io';
 import mqttConfig from './config/mqtt/mqtt-config.js';
+import sensorDataService from './services/sensor-data-service.js';
 
 async function mainServer() {
 
@@ -19,7 +20,7 @@ async function mainServer() {
         });
     });
 
-    mqttConfig.init(io);
+    mqttConfig.init(io, (topic, payload) => sensorDataService.parseAndSaveMqttMessage(topic, payload));
 
     bdInit()
         .then(() => console.log('[server] Conexión exitosa con la base de datos 🤝'))

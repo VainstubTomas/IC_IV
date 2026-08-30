@@ -12,9 +12,10 @@ let client = null;
 /**
  * socket.io objeto from app.js to listen events in live
  * @param {object} io
+ * @param {(topic: string, payload: string) => Promise<any>} [persistHandler] callback para persistir mensajes MQTT entrantes, inyectado por el composition root para evitar un import circular con la capa de servicio
  */
 
-function init(io) {
+function init(io, persistHandler) {
     if(client) return;
 
     // Opciones de conexión MQTT
@@ -66,11 +67,12 @@ function init(io) {
             console.log(`[mqtt-config] Tópico: ${topic}, Payload: ${payload}`);
 
             let savedData = null;
-            try {
-                const { default: sensorDataService } = await import('../../services/sensor-data-service.js');
-                savedData = await sensorDataService.parseAndSaveMqttMessage(topic, payload);
-            } catch (serviceErr) {
-                console.error('[mqtt-config] Error al persistir mensaje MQTT en DB:', serviceErr.message);
+            if (typeof persistHandler === 'function') {
+                try {
+                    savedData = await persistHandler(topic, payload);
+                } catch (serviceErr) {
+                    console.error('[mqtt-config] Error al persistir mensaje MQTT en DB:', serviceErr.message);
+                }
             }
 
             // io propagation - send to all web connected clients

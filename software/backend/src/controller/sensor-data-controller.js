@@ -1,4 +1,5 @@
 import sensorDataService from "../services/sensor-data-service.js";
+import mqttConfig from "../config/mqtt/mqtt-config.js";
 
 class SensorDataController {
   /**
@@ -84,7 +85,7 @@ class SensorDataController {
    */
   async forceRead(req, res) {
     try {
-      const published = sensorDataService.sendDeviceCommand("analog", "force_read");
+      const published = mqttConfig.publishCommand("analog", "force_read");
 
       // Consultar la última lectura para responder
       const latest = await sensorDataService.getLatestTelemetry();

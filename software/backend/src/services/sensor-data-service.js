@@ -1,5 +1,4 @@
 import sensorDataRepository from "../repository/sensor-data-repository.js";
-import mqttConfig from "../config/mqtt/mqtt-config.js";
 
 /**
  * Formatea una fecha a string legible YYYY-MM-DD HH:mm:ss
@@ -129,13 +128,6 @@ class SensorDataService {
       console.error("[sensor-service] Error procesando payload MQTT:", err.message);
     }
     return null;
-  }
-
-  /**
-   * Envía un comando hacia los nodos a través del broker MQTT
-   */
-  sendDeviceCommand(type, payload) {
-    return mqttConfig.publishCommand(type, payload);
   }
 }
 
