@@ -3,7 +3,7 @@ import mqttConfig from "../config/mqtt/mqtt-config.js";
 
 class SensorDataController {
   /**
-   * POST /api/telemetria
+   * POST /api/v1/telemetria
    * Inserta un nuevo registro de telemetría enviado por HTTP
    */
   async postTelemetry(req, res) {
@@ -41,7 +41,7 @@ class SensorDataController {
   }
 
   /**
-   * GET /api/telemetria/latest y GET /api/telemetria
+   * GET /api/v1/telemetria/latest
    * Retorna el último registro de telemetría registrado
    */
   async getLatestTelemetry(req, res) {
@@ -58,7 +58,7 @@ class SensorDataController {
   }
 
   /**
-   * GET /api/telemetria/history
+   * GET /api/v1/telemetria/history
    * Retorna el histórico de telemetría
    */
   async getHistory(req, res) {
@@ -80,7 +80,7 @@ class SensorDataController {
   }
 
   /**
-   * POST /api/leer
+   * POST /api/v1/leer
    * Forzar lectura inmediata enviando comando MQTT hacia el nodo
    */
   async forceRead(req, res) {
@@ -106,7 +106,7 @@ class SensorDataController {
   }
 
   /**
-   * GET /api/health
+   * GET /api/v1/health
    * Verificación de salud del backend
    */
   healthCheck(req, res) {
