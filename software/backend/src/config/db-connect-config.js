@@ -6,6 +6,6 @@ export const bdInit = async () => {
         await connect(config.BDURL);
     } catch (error) {
         console.log("[db-connect-config] error: ", error);
-        throw new error(error);
+        throw error;
     }
 }
