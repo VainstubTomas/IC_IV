@@ -402,9 +402,11 @@
     }
 
     /**
-     * Carga el umbral vigente GET /api/v1/umbrales y lo refleja en los inputs
+     * Carga el umbral vigente GET /api/v1/umbrales.
+     * @param {boolean} actualizarInputs - si además de mostrar el texto, pisa los inputs
+     *   (false durante el polling automático, para no interrumpir al usuario mientras escribe)
      */
-    async function obtenerUmbrales() {
+    async function obtenerUmbrales(actualizarInputs = true) {
       const umbralActualText = document.getElementById('umbralActualText');
       try {
         const respuesta = await fetch('/api/v1/umbrales', {
@@ -419,8 +421,10 @@
         const datos = await respuesta.json();
 
         if (datos.configured) {
-          document.getElementById('inputMin').value = datos.min;
-          document.getElementById('inputMax').value = datos.max;
+          if (actualizarInputs) {
+            document.getElementById('inputMin').value = datos.min;
+            document.getElementById('inputMax').value = datos.max;
+          }
           umbralActualText.textContent = `Umbral actual: ${datos.min}°C – ${datos.max}°C`;
         } else {
           umbralActualText.textContent = 'Sin umbrales configurados todavía';
@@ -582,7 +586,10 @@
       obtenerTelemetria();
       setInterval(obtenerTelemetria, 5000);
       obtenerUmbrales();
+      // Refresco periódico solo del texto de umbral vigente (no pisa los inputs mientras se editan)
+      setInterval(() => obtenerUmbrales(false), 5000);
       obtenerEmails();
+      setInterval(obtenerEmails, 5000);
     });
   </script>
 </body>
