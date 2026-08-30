@@ -10,7 +10,7 @@ Servidor backend desarrollado en **Node.js (Express 5)** con persistencia en **M
 - **`repository/sensor-data-repository.js`:** Operaciones de base de datos (`create`, `getLatest`, `getHistory`, `getStats`).
 - **`services/sensor-data-service.js`:** Lógica de negocio, validación de rangos térmicos, formateo de timestamps y parser automático de mensajes MQTT (`"Heladera1:3.85"` o JSON).
 - **`controller/sensor-data-controller.js`:** Handlers de peticiones HTTP con validaciones y manejo de errores.
-- **`routes/sensor-data-routes.js`:** Endpoints REST (`/api/telemetria`, `/api/telemetria/latest`, `/api/telemetria/history`, `/api/leer`, `/api/health`).
+- **`routes/sensor-data-routes.js`:** Endpoints REST (`/api/v1/telemetria`, `/api/v1/telemetria/latest`, `/api/v1/telemetria/history`, `/api/v1/leer`, `/api/v1/health`).
 - **`config/mqtt/mqtt-config.js`:** Cliente MQTT con auto-ingesta y persistencia directa a la base de datos al recibir mensajes en `iciv/#`.
 
 ---
@@ -44,7 +44,7 @@ El servidor quedará escuchando en `http://localhost:3000`.
 
 ## 📡 Catálogo de Endpoints de la API
 
-### 1. `GET /api/telemetria/latest` (o `/api/telemetria`)
+### 1. `GET /api/v1/telemetria/latest`
 Obtiene la última lectura de telemetría registrada.
 
 **Respuesta (200 OK):**
@@ -62,7 +62,7 @@ Obtiene la última lectura de telemetría registrada.
 
 ---
 
-### 2. `POST /api/telemetria`
+### 2. `POST /api/v1/telemetria`
 Inserta una nueva lectura manualmente o desde un dispositivo HTTP.
 
 **Body (JSON):**
@@ -76,15 +76,15 @@ Inserta una nueva lectura manualmente o desde un dispositivo HTTP.
 
 ---
 
-### 3. `GET /api/telemetria/history?limit=20`
+### 3. `GET /api/v1/telemetria/history?limit=20`
 Consulta las últimas lecturas históricas ordenadas cronológicamente.
 
 ---
 
-### 4. `POST /api/leer`
+### 4. `POST /api/v1/leer`
 Dispara un comando de lectura forzada hacia el nodo a través de MQTT (`iciv/value1/analog`).
 
 ---
 
-### 5. `GET /api/health`
+### 5. `GET /api/v1/health`
 Verifica el estado del servidor y tiempo de actividad (uptime).

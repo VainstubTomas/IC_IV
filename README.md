@@ -127,7 +127,7 @@ El backend se conectará automáticamente a:
 * **Broker MQTT:** `mqtt://localhost:1883` (suscrito al tópico `iciv/#`)
 
 ### 3. Abrir el Dashboard Frontend
-* **Opción directa:** Haz doble clic sobre `index.html` (o `frontend/index.html`) en tu explorador de archivos para abrirlo en el navegador.
+* **Opción directa:** Haz doble clic sobre `frontend/index.html` en tu explorador de archivos para abrirlo en el navegador.
 * Cuenta con visualización de temperatura (°C), señal LoRa RSSI (dBm), timestamp RTC, botón de "Forzar lectura" y modo simulación automático si los servicios aún no están enviando datos.
 
 ---
@@ -139,27 +139,27 @@ Una vez levantados Docker y el Backend, puedes probar los endpoints desde tu ter
 ### 1. Probar inserción manual de telemetría (POST)
 ```bash
 # Con cURL
-curl -X POST http://localhost:3000/api/telemetria \
+curl -X POST http://localhost:3000/api/v1/telemetria \
   -H "Content-Type: application/json" \
   -d "{\"temperatura\": 4.1, \"rssi\": -80, \"deviceId\": \"Heladera1\"}"
 
 # Con PowerShell
-Invoke-RestMethod -Uri "http://localhost:3000/api/telemetria" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"temperatura": 4.1, "rssi": -80}'
+Invoke-RestMethod -Uri "http://localhost:3000/api/v1/telemetria" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"temperatura": 4.1, "rssi": -80}'
 ```
 
 ### 2. Consultar la última lectura (GET)
 ```bash
-curl http://localhost:3000/api/telemetria/latest
+curl http://localhost:3000/api/v1/telemetria/latest
 ```
 
 ### 3. Consultar historial de telemetría (GET)
 ```bash
-curl "http://localhost:3000/api/telemetria/history?limit=10"
+curl "http://localhost:3000/api/v1/telemetria/history?limit=10"
 ```
 
 ### 4. Probar forzado de lectura (POST)
 ```bash
-curl -X POST http://localhost:3000/api/leer
+curl -X POST http://localhost:3000/api/v1/leer
 ```
 
 ---

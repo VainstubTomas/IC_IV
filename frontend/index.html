@@ -266,7 +266,7 @@
 
       if (esReal) {
         statusLed.className = 'led-indicator connected';
-        statusText.textContent = 'Conectado (/api/telemetria)';
+        statusText.textContent = 'Conectado (/api/v1/telemetria/latest)';
         statusText.style.color = 'var(--accent-emerald)';
       } else {
         statusLed.className = 'led-indicator simulation';
@@ -276,11 +276,11 @@
     }
 
     /**
-     * Función principal de sondeo (polling) GET /api/telemetria cada 5s
+     * Función principal de sondeo (polling) GET /api/v1/telemetria/latest cada 5s
      */
     async function obtenerTelemetria() {
       try {
-        const respuesta = await fetch('/api/telemetria', {
+        const respuesta = await fetch('/api/v1/telemetria/latest', {
           method: 'GET',
           headers: {
             'Accept': 'application/json'
@@ -301,7 +301,7 @@
     }
 
     /**
-     * Forzar lectura manual mediante POST /api/leer
+     * Forzar lectura manual mediante POST /api/v1/leer
      */
     async function forzarLectura() {
       const btn = document.getElementById('btnForceRead');
@@ -315,7 +315,7 @@
       btnIcon.style.display = 'none';
 
       try {
-        const respuesta = await fetch('/api/leer', {
+        const respuesta = await fetch('/api/v1/leer', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -340,7 +340,7 @@
         // Fallback simulado cuando el endpoint no está disponible
         const datosMock = generarDatosSimulados();
         actualizarUI(datosMock, false);
-        mostrarToast('Simulación: Comando /api/leer ejecutado (Offline)', 'warning');
+        mostrarToast('Simulación: Comando /api/v1/leer ejecutado (Offline)', 'warning');
       } finally {
         // Restaurar estado del botón
         setTimeout(() => {
