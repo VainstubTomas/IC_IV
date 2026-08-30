@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telemetría Industrial - Heladera IoT</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- HEADER -->
+    <header>
+      <div class="brand-section">
+        <div class="brand-icon">❄️</div>
+        <div class="brand-text">
+          <h1>Telemetría de Refrigeración Industrial</h1>
+          <div class="hardware-spec">
+            <span class="badge-chip">XIAO ESP32-S3</span>
+            <span class="badge-chip">LoRa SX1262</span>
+            <span>DS18B20 + RTC</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-panel">
+        <div class="connection-status" id="statusBox">
+          <div class="led-indicator simulation" id="statusLed"></div>
+          <span id="statusText">Modo Simulación (Offline)</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- GRID DE TARJETAS PRINCIPALES (3 VARIABLES) -->
+    <main class="dashboard-grid">
+      
+      <!-- TARJETA 1: TEMPERATURA -->
+      <article class="card" style="--card-accent: var(--accent-cyan);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">🌡️</span> Temperatura Interna
+          </span>
+          <span class="card-tag">DS18B20 1-Wire</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="tempValue">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="temp-range-bar">
+            <div class="temp-marker" id="tempMarker" style="left: 50%;"></div>
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span style="color: var(--text-secondary);">Rango recomendado: 2.0°C - 6.0°C</span>
+          <span class="badge-chip" id="tempStatusBadge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border-color: rgba(16, 185, 129, 0.3);">NORMAL</span>
+        </div>
+      </article>
+
+      <!-- TARJETA 2: SEÑAL LORA RSSI -->
+      <article class="card" style="--card-accent: var(--accent-emerald);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">📡</span> Nivel de Señal LoRa
+          </span>
+          <span class="card-tag">SX1262 RSSI</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="rssiValue">---</span>
+            <span class="metric-unit">dBm</span>
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span id="rssiQualityText" style="color: var(--text-secondary);">Enlace Estable</span>
+          <div class="rssi-bars" id="rssiBars">
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar active"></div>
+            <div class="rssi-bar"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- TARJETA 3: TIMESTAMP RTC -->
+      <article class="card" style="--card-accent: var(--accent-amber);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">⏱️</span> Última Lectura
+          </span>
+          <span class="card-tag">RTC Hardware</span>
+        </div>
+        <div class="card-body">
+          <div class="metric-value-container">
+            <span class="metric-value" id="timeValue" style="font-size: 1.85rem; letter-spacing: -0.5px;">--:--:--</span>
+          </div>
+          <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);" id="dateValue">
+            ----/--/--
+          </div>
+        </div>
+        <div class="metric-status-line">
+          <span style="color: var(--text-secondary);">Frecuencia de muestreo</span>
+          <span class="badge-chip" id="lastUpdatedBadge">5s polling</span>
+        </div>
+      </article>
+
+    </main>
+
+    <!-- BARRA DE ACCIONES Y CONTROLES -->
+    <section class="actions-panel">
+      <div class="polling-info">
+        <div class="polling-spinner"></div>
+        <span>Actualización automática activa cada <strong>5 segundos</strong></span>
+      </div>
+
+      <button type="button" class="btn-action" id="btnForceRead" onclick="forzarLectura()">
+        <span class="btn-spinner" id="btnSpinner"></span>
+        <span id="btnIcon">⚡</span>
+        <span id="btnText">Forzar lectura</span>
+      </button>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      Sistema de Monitoreo Edge IoT &bull; Placa XIAO ESP32-S3 &bull; Módulo LoRa SX1262 &bull; Interfaz Standalone Vanilla
+    </footer>
+
+  </div>
+
+  <!-- CONTENEDOR DE TOASTS -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ==========================================================================
+       LÓGICA JAVASCRIPT (VANILLA ASYNC)
+       ========================================================================== -->
+  <script>
+    // Variables de estado interno para simulación continua y coherente
+    let simulacionTemp = 3.8;
+    let simulacionRssi = -78;
+
+    /**
+     * Muestra una notificación visual no invasiva (Toast)
+     */
+    function mostrarToast(mensaje, tipo = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${tipo}`;
+      toast.textContent = mensaje;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(50px)';
+        setTimeout(() => toast.remove(), 400);
+      }, 3500);
+    }
+
+    /**
+     * Generador de datos simulados coherentes para una heladera
+     */
+    function generarDatosSimulados() {
+      // Simula ligera oscilación térmica típica entre 2.2°C y 5.8°C
+      const deltaTemp = (Math.random() - 0.48) * 0.3;
+      simulacionTemp = Math.max(1.8, Math.min(6.5, simulacionTemp + deltaTemp));
+
+      // Simula variación leve de RSSI LoRa entre -65 y -98 dBm
+      const deltaRssi = Math.round((Math.random() - 0.5) * 4);
+      simulacionRssi = Math.max(-105, Math.min(-60, simulacionRssi + deltaRssi));
+
+      // Timestamp local RTC
+      const ahora = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const fechaStr = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}`;
+      const horaStr = `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`;
+
+      return {
+        temperatura: parseFloat(simulacionTemp.toFixed(1)),
+        rssi: simulacionRssi,
+        timestamp: `${fechaStr} ${horaStr}`,
+        fuente: 'mock'
+      };
+    }
+
+    /**
+     * Actualiza todos los elementos de la interfaz con el objeto de telemetría
+     */
+    function actualizarUI(datos, esReal) {
+      const { temperatura, rssi, timestamp } = datos;
+
+      // 1. Tarjeta Temperatura
+      const tempElem = document.getElementById('tempValue');
+      const tempMarker = document.getElementById('tempMarker');
+      const tempBadge = document.getElementById('tempStatusBadge');
+
+      tempElem.textContent = temperatura.toFixed(1);
+
+      // Calcular posición en barra de rango (0°C a 10°C)
+      const porcentajeTemp = Math.max(0, Math.min(100, (temperatura / 10) * 100));
+      tempMarker.style.left = `${porcentajeTemp}%`;
+
+      if (temperatura < 2.0) {
+        tempBadge.textContent = 'MUY FRÍO';
+        tempBadge.style.color = 'var(--accent-blue)';
+        tempBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+      } else if (temperatura <= 6.0) {
+        tempBadge.textContent = 'ÓPTIMO';
+        tempBadge.style.color = 'var(--accent-emerald)';
+        tempBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      } else {
+        tempBadge.textContent = 'ALERTA CALOR';
+        tempBadge.style.color = 'var(--accent-rose)';
+        tempBadge.style.background = 'rgba(244, 63, 94, 0.15)';
+      }
+
+      // 2. Tarjeta LoRa RSSI
+      const rssiElem = document.getElementById('rssiValue');
+      const qualityText = document.getElementById('rssiQualityText');
+      const bars = document.querySelectorAll('#rssiBars .rssi-bar');
+
+      rssiElem.textContent = rssi;
+
+      // Evaluar calidad de señal LoRa (típicamente -120 dBm a -50 dBm)
+      let activeBars = 1;
+      if (rssi >= -70) {
+        activeBars = 4;
+        qualityText.textContent = 'Excelente Cobertura';
+      } else if (rssi >= -85) {
+        activeBars = 3;
+        qualityText.textContent = 'Buena Señal';
+      } else if (rssi >= -100) {
+        activeBars = 2;
+        qualityText.textContent = 'Señal Moderada';
+      } else {
+        activeBars = 1;
+        qualityText.textContent = 'Señal Débil / Límite';
+      }
+
+      bars.forEach((bar, index) => {
+        if (index < activeBars) {
+          bar.classList.add('active');
+        } else {
+          bar.classList.remove('active');
+        }
+      });
+
+      // 3. Tarjeta Timestamp
+      const timeElem = document.getElementById('timeValue');
+      const dateElem = document.getElementById('dateValue');
+
+      if (timestamp) {
+        const partes = timestamp.split(' ');
+        if (partes.length === 2) {
+          dateElem.textContent = partes[0];
+          timeElem.textContent = partes[1];
+        } else {
+          timeElem.textContent = timestamp;
+          dateElem.textContent = 'RTC Sincronizado';
+        }
+      }
+
+      // 4. Indicador de Conexión
+      const statusLed = document.getElementById('statusLed');
+      const statusText = document.getElementById('statusText');
+
+      if (esReal) {
+        statusLed.className = 'led-indicator connected';
+        statusText.textContent = 'Conectado (/api/v1/telemetria/latest)';
+        statusText.style.color = 'var(--accent-emerald)';
+      } else {
+        statusLed.className = 'led-indicator simulation';
+        statusText.textContent = 'Modo Simulación (Offline)';
+        statusText.style.color = 'var(--accent-amber)';
+      }
+    }
+
+    /**
+     * Función principal de sondeo (polling) GET /api/v1/telemetria/latest cada 5s
+     */
+    async function obtenerTelemetria() {
+      try {
+        const respuesta = await fetch('/api/v1/telemetria/latest', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}: Fallo en endpoint de telemetría`);
+        }
+
+        const datos = await respuesta.json();
+        actualizarUI(datos, true);
+      } catch (error) {
+        // En caso de error o servidor no levantado, inyectar datos simulados coherentes
+        const datosMock = generarDatosSimulados();
+        actualizarUI(datosMock, false);
+      }
+    }
+
+    /**
+     * Forzar lectura manual mediante POST /api/v1/leer
+     */
+    async function forzarLectura() {
+      const btn = document.getElementById('btnForceRead');
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+
+      // Estado de carga UI
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btnText.textContent = 'Solicitando...';
+      btnIcon.style.display = 'none';
+
+      try {
+        const respuesta = await fetch('/api/v1/leer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ origen: 'dashboard_manual', trigger: 'force_read' })
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}`);
+        }
+
+        const resultado = await respuesta.json();
+        mostrarToast('¡Lectura forzada ejecutada correctamente!', 'success');
+        
+        // Si el backend devuelve inmediatamente la telemetría, actualizamos
+        if (resultado && resultado.telemetria) {
+          actualizarUI(resultado.telemetria, true);
+        } else {
+          await obtenerTelemetria();
+        }
+      } catch (error) {
+        // Fallback simulado cuando el endpoint no está disponible
+        const datosMock = generarDatosSimulados();
+        actualizarUI(datosMock, false);
+        mostrarToast('Simulación: Comando /api/v1/leer ejecutado (Offline)', 'warning');
+      } finally {
+        // Restaurar estado del botón
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove('loading');
+          btnText.textContent = 'Forzar lectura';
+          btnIcon.style.display = 'inline';
+        }, 500);
+      }
+    }
+
+    // Inicializar lectura inmediata y configurar polling de 5 segundos
+    document.addEventListener('DOMContentLoaded', () => {
+      obtenerTelemetria();
+      setInterval(obtenerTelemetria, 5000);
+    });
+  </script>
+</body>
+</html>

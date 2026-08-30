@@ -12,20 +12,26 @@ let client = null;
 /**
  * socket.io objeto from app.js to listen events in live
  * @param {object} io
+ * @param {(topic: string, payload: string) => Promise<any>} [persistHandler] callback para persistir mensajes MQTT entrantes, inyectado por el composition root para evitar un import circular con la capa de servicio
  */
 
-function init(io) {
-    // broker auth certificate
-    const CA = fs.readFileSync(config.MQTTBROKERCAPATH);
-
+function init(io, persistHandler) {
     if(client) return;
 
-    client = mqtt.connect(MQTTBROKERURL, {
-        username: config.BROKERUSERNAME,
-        password: config.BROKERPASSW,
-        clean: true,
-        ca: CA
-    });
+    // Opciones de conexión MQTT
+    const mqttOptions = {
+        clean: true
+    };
+
+    if (config.BROKERUSERNAME) mqttOptions.username = config.BROKERUSERNAME;
+    if (config.BROKERPASSW) mqttOptions.password = config.BROKERPASSW;
+
+    // Solo cargar certificado CA si está definido y el archivo existe
+    if (config.MQTTBROKERCAPATH && fs.existsSync(config.MQTTBROKERCAPATH)) {
+        mqttOptions.ca = fs.readFileSync(config.MQTTBROKERCAPATH);
+    }
+
+    client = mqtt.connect(MQTTBROKERURL, mqttOptions);
 
     // drive connection
     client.on("connect", () => {
@@ -52,17 +58,26 @@ function init(io) {
         }
     });
 
-    // messages reception (gateway mqtt -> socket.io)
-    client.on('message', (topic, message) => {
+    // messages reception (gateway mqtt -> socket.io + MongoDB persistence)
+    client.on('message', async (topic, message) => {
         try {
             const payload = message.toString();
             
             // Log of receipted data
             console.log(`[mqtt-config] Tópico: ${topic}, Payload: ${payload}`);
 
+            let savedData = null;
+            if (typeof persistHandler === 'function') {
+                try {
+                    savedData = await persistHandler(topic, payload);
+                } catch (serviceErr) {
+                    console.error('[mqtt-config] Error al persistir mensaje MQTT en DB:', serviceErr.message);
+                }
+            }
+
             // io propagation - send to all web connected clients
             if (io) {
-                io.emit('mqtt_update', { topic, payload });
+                io.emit('mqtt_update', { topic, payload, data: savedData });
             }
 
         } catch (e) {
