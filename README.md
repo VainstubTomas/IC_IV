@@ -37,10 +37,10 @@ fridge-telemetry-dashboard/
 │   │   └── mosquitto.conf          # Configuración de listeners TCP (1883) y WebSockets (9001)
 │   ├── data/                       # Persistencia de mensajes MQTT
 │   └── log/                        # Logs del broker
-├── frontend/
-│   └── index.html                  # Dashboard industrial monocomponente (CSS Grid, Dark Theme)
-├── index.html                      # Acceso directo al Dashboard para doble clic
 ├── software/
+│   ├── frontend/
+│   │   ├── index.html              # Dashboard industrial monocomponente (CSS Grid, Dark Theme)
+│   │   └── styles.css              # Estilos del dashboard
 │   └── backend/
 │       ├── package.json            # Dependencias (Express 5, Mongoose, MQTT, Socket.IO)
 │       ├── .env                    # Configuración de entorno local
@@ -127,7 +127,7 @@ El backend se conectará automáticamente a:
 * **Broker MQTT:** `mqtt://localhost:1883` (suscrito al tópico `iciv/#`)
 
 ### 3. Abrir el Dashboard Frontend
-* **Opción directa:** Haz doble clic sobre `frontend/index.html` en tu explorador de archivos para abrirlo en el navegador.
+* **Opción directa:** Haz doble clic sobre `software/frontend/index.html` en tu explorador de archivos para abrirlo en el navegador.
 * Cuenta con visualización de temperatura (°C), señal LoRa RSSI (dBm), timestamp RTC, botón de "Forzar lectura" y modo simulación automático si los servicios aún no están enviando datos.
 
 ---

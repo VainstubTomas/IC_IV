@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Servir frontend estático directamente si se accede por navegador
-const frontendPath = path.resolve(__dirname, '../../../frontend');
+const frontendPath = path.resolve(__dirname, '../../frontend');
 app.use(express.static(frontendPath));
 
 app.use('/api', apiRoutes);
