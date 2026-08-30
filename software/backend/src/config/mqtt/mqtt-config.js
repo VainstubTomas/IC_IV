@@ -92,7 +92,7 @@ function init(io, persistHandler) {
  * @param {string} payload - El valor del comando (ej: '150' o '1').
  */
 
-function publishCommand(type, payload) {
+function publishCommand(type, payload, options = {}) {
     if (!client || !client.connected) {
         console.error('[mqtt-config] No se puede publicar porque el cliente MQTT no está conectado.');
         return false;
@@ -105,13 +105,16 @@ function publishCommand(type, payload) {
         case "analog":
             topic = TOPICS.CMDANALOG;
             break;
+        case "threshold":
+            topic = TOPICS.CMDTHRESHOLD;
+            break;
         default:
             console.log(`[mqtt-config] comando desconocido ${type}`);
             return false;
     }
 
     // payload publish
-    client.publish(topic, String(payload), { qos: 0, retain: false }, (err) => {
+    client.publish(topic, String(payload), { qos: 0, retain: false, ...options }, (err) => {
         if (err) {
             console.log(`[mqtt-config] Error al publicar en ${topic}:`, err);
         } else {

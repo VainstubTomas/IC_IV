@@ -107,6 +107,55 @@
 
     </main>
 
+    <!-- GRID DE CONFIGURACIÓN DE ALERTAS -->
+    <section class="config-grid">
+
+      <!-- TARJETA 4: UMBRALES DE TEMPERATURA -->
+      <article class="card" style="--card-accent: var(--accent-rose);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">🎚️</span> Umbrales de Temperatura
+          </span>
+          <span class="card-tag">Config</span>
+        </div>
+        <div class="card-body">
+          <div class="input-row">
+            <label class="input-label" for="inputMin">Mínimo (°C)</label>
+            <input type="number" step="0.1" class="input-field" id="inputMin" placeholder="0.0">
+          </div>
+          <div class="input-row">
+            <label class="input-label" for="inputMax">Máximo (°C)</label>
+            <input type="number" step="0.1" class="input-field" id="inputMax" placeholder="8.0">
+          </div>
+          <button type="button" class="btn-action" id="btnGuardarUmbrales" onclick="guardarUmbrales()">
+            <span class="btn-spinner" id="btnUmbralesSpinner"></span>
+            <span id="btnUmbralesText">Guardar umbrales</span>
+          </button>
+        </div>
+        <div class="metric-status-line">
+          <span style="color: var(--text-secondary);" id="umbralActualText">Cargando umbral vigente...</span>
+        </div>
+      </article>
+
+      <!-- TARJETA 5: EMAILS DE ALERTA -->
+      <article class="card" style="--card-accent: var(--accent-blue);">
+        <div class="card-header">
+          <span class="card-title">
+            <span class="card-icon">🔔</span> Emails de Alerta
+          </span>
+          <span class="card-tag" id="emailCountTag">0 registrados</span>
+        </div>
+        <div class="card-body">
+          <div class="input-row">
+            <input type="email" class="input-field" id="inputEmail" placeholder="correo@ejemplo.com">
+            <button type="button" class="btn-action" id="btnAgregarEmail" onclick="agregarEmail()">Agregar</button>
+          </div>
+          <ul class="email-list" id="emailList"></ul>
+        </div>
+      </article>
+
+    </section>
+
     <!-- BARRA DE ACCIONES Y CONTROLES -->
     <section class="actions-panel">
       <div class="polling-info">
@@ -352,10 +401,195 @@
       }
     }
 
+    /**
+     * Carga el umbral vigente GET /api/v1/umbrales.
+     * @param {boolean} actualizarInputs - si además de mostrar el texto, pisa los inputs
+     *   (false durante el polling automático, para no interrumpir al usuario mientras escribe)
+     */
+    async function obtenerUmbrales(actualizarInputs = true) {
+      const umbralActualText = document.getElementById('umbralActualText');
+      try {
+        const respuesta = await fetch('/api/v1/umbrales', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}`);
+        }
+
+        const datos = await respuesta.json();
+
+        if (datos.configured) {
+          if (actualizarInputs) {
+            document.getElementById('inputMin').value = datos.min;
+            document.getElementById('inputMax').value = datos.max;
+          }
+          umbralActualText.textContent = `Umbral actual: ${datos.min}°C – ${datos.max}°C`;
+        } else {
+          umbralActualText.textContent = 'Sin umbrales configurados todavía';
+        }
+      } catch (error) {
+        umbralActualText.textContent = 'No se pudo cargar el umbral vigente';
+      }
+    }
+
+    /**
+     * Guarda el umbral mediante POST /api/v1/umbrales
+     */
+    async function guardarUmbrales() {
+      const btn = document.getElementById('btnGuardarUmbrales');
+      const btnText = document.getElementById('btnUmbralesText');
+
+      const min = parseFloat(document.getElementById('inputMin').value);
+      const max = parseFloat(document.getElementById('inputMax').value);
+
+      if (Number.isNaN(min) || Number.isNaN(max) || min >= max) {
+        mostrarToast('Ingresá un mínimo menor al máximo', 'warning');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btnText.textContent = 'Guardando...';
+
+      try {
+        const respuesta = await fetch('/api/v1/umbrales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ min, max })
+        });
+
+        const resultado = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(resultado.message || `HTTP ${respuesta.status}`);
+        }
+
+        mostrarToast('Umbrales guardados correctamente', 'success');
+        await obtenerUmbrales();
+      } catch (error) {
+        mostrarToast(`Error al guardar umbrales: ${error.message}`, 'warning');
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove('loading');
+          btnText.textContent = 'Guardar umbrales';
+        }, 500);
+      }
+    }
+
+    /**
+     * Pinta la lista de emails de alerta en el DOM
+     */
+    function renderizarListaEmails(lista) {
+      const contenedor = document.getElementById('emailList');
+      const tag = document.getElementById('emailCountTag');
+
+      contenedor.innerHTML = '';
+      tag.textContent = `${lista.length} registrado${lista.length === 1 ? '' : 's'}`;
+
+      lista.forEach(({ id, email }) => {
+        const li = document.createElement('li');
+        li.className = 'email-list-item';
+
+        const span = document.createElement('span');
+        span.textContent = email;
+
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'btn-action danger small';
+        btnEliminar.textContent = 'Eliminar';
+        btnEliminar.onclick = () => eliminarEmail(id);
+
+        li.appendChild(span);
+        li.appendChild(btnEliminar);
+        contenedor.appendChild(li);
+      });
+    }
+
+    /**
+     * Carga la lista de emails de alerta GET /api/v1/alertas/emails
+     */
+    async function obtenerEmails() {
+      try {
+        const respuesta = await fetch('/api/v1/alertas/emails', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (!respuesta.ok) {
+          throw new Error(`HTTP ${respuesta.status}`);
+        }
+
+        const resultado = await respuesta.json();
+        renderizarListaEmails(resultado.data || []);
+      } catch (error) {
+        mostrarToast('No se pudo cargar la lista de emails', 'warning');
+      }
+    }
+
+    /**
+     * Agrega un email de alerta mediante POST /api/v1/alertas/emails
+     */
+    async function agregarEmail() {
+      const input = document.getElementById('inputEmail');
+      const email = input.value.trim();
+
+      if (!email) return;
+
+      try {
+        const respuesta = await fetch('/api/v1/alertas/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+
+        const resultado = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(resultado.message || `HTTP ${respuesta.status}`);
+        }
+
+        input.value = '';
+        mostrarToast('Email agregado correctamente', 'success');
+        await obtenerEmails();
+      } catch (error) {
+        mostrarToast(`Error al agregar email: ${error.message}`, 'warning');
+      }
+    }
+
+    /**
+     * Elimina un email de alerta mediante DELETE /api/v1/alertas/emails/:id
+     */
+    async function eliminarEmail(id) {
+      try {
+        const respuesta = await fetch(`/api/v1/alertas/emails/${id}`, {
+          method: 'DELETE'
+        });
+
+        const resultado = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(resultado.message || `HTTP ${respuesta.status}`);
+        }
+
+        mostrarToast('Email eliminado correctamente', 'success');
+        await obtenerEmails();
+      } catch (error) {
+        mostrarToast(`Error al eliminar email: ${error.message}`, 'warning');
+      }
+    }
+
     // Inicializar lectura inmediata y configurar polling de 5 segundos
     document.addEventListener('DOMContentLoaded', () => {
       obtenerTelemetria();
       setInterval(obtenerTelemetria, 5000);
+      obtenerUmbrales();
+      // Refresco periódico solo del texto de umbral vigente (no pisa los inputs mientras se editan)
+      setInterval(() => obtenerUmbrales(false), 5000);
+      obtenerEmails();
+      setInterval(obtenerEmails, 5000);
     });
   </script>
 </body>
