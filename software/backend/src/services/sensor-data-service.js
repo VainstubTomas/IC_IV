@@ -1,4 +1,5 @@
 import sensorDataRepository from "../repository/sensor-data-repository.js";
+import alertService from "./alert-service.js";
 
 /**
  * Formatea una fecha a string legible YYYY-MM-DD HH:mm:ss
@@ -30,6 +31,11 @@ class SensorDataService {
       deviceId: deviceId || "Heladera1",
       source
     });
+
+    // Chequeo de umbral no bloqueante: un fallo de mail/DB acá nunca debe romper el guardado.
+    alertService
+      .checkThresholdAndNotify({ deviceId: record.deviceId, temperature: record.temperature })
+      .catch((err) => console.error("[sensor-service] Error al chequear umbrales:", err.message));
 
     return {
       id: record._id,
