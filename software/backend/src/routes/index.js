@@ -3,7 +3,7 @@ import sensorRoutes from "./sensor-data-routes.js";
 
 const router = Router();
 
-// Montar rutas de sensores y telemetría bajo el prefijo correspondiente
-router.use("/", sensorRoutes);
+// Rutas versionadas: agregar nuevas versiones (/v2, etc.) sin tocar app.js
+router.use("/v1", sensorRoutes);
 
 export default router;
