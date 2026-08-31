@@ -133,7 +133,15 @@ El backend se conectará automáticamente a:
 
 ## 🧪 Pruebas Rápidas y Validación de la API
 
-Swagger (proximamente):
+La API está documentada con **OpenAPI 3.0** (`swagger-jsdoc` + `swagger-ui-express`). Con el servidor corriendo, la documentación interactiva está disponible en:      
+
+http://localhost:3000/api-docs                                                                                       
+
+Desde ahí se puede:
+- Ver todos los endpoints agrupados por categoría (**Sistema**, **Telemetría**, **Umbrales**, **Alertas**), con sus parámetros, bodies y posibles respuestas.
+- Probarlos en vivo con el botón **"Try it out"**, sin necesidad de Postman, Insomnia ni escribir `curl` a mano.
+- Compartir la API con terceros (compañeros, profesores) simplemente enviando esa URL — ideal para demos académicas.
+- Para que las pruebas devuelvan datos reales (y no error 500), asegurate de tener los contenedores de Docker levantados (`docker compose up -d`, ver paso 1 más arriba).
 
 ---
 
