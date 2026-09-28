@@ -32,10 +32,18 @@ Proyecto completo e integrado de adquisición, transporte, procesamiento y visua
 ```
 IC_IV/
  ├── firmware/
- │   └── main/                      # Firmware del nodo sensor (Arduino, XIAO ESP32-S3)
- │       ├── main.ino               # Lógica principal: lectura de sensor y transmisión LoRa
- │       ├── temp_sensor.cpp/.h     # Driver del sensor de temperatura DS18B20 (1-Wire)
- │       └── oled_rtc.cpp/.h        # Manejo de display OLED + módulo RTC (hora/fecha local)
+ │   ├── nodo_lorawan/              # Nodo LoRaWAN oficial (ChirpStack AU915 OTAA + DS18B20 + OLED)
+ │   │   ├── nodo_lorawan.ino       # Lógica LoRaWAN: OTAA, NVS nonces, uplink confirmado
+ │   │   ├── credenciales.h.example # Plantilla para DEV_EUI, JOIN_EUI, APP_KEY
+ │   │   ├── temp_sensor.cpp/.h     # Driver DS18B20 1-Wire
+ │   │   └── oled_rtc.cpp/.h        # Display OLED SH1106 + RTC DS3231
+ │   └── main/                      # Firmware legacy de pruebas LoRa P2P
+ │       ├── main.ino
+ │       ├── temp_sensor.cpp/.h
+ │       └── oled_rtc.cpp/.h
+ │
+ ├── configuration/
+ │   └── codec-heladera.js          # Codec JavaScript para decodificar el payload en ChirpStack
  │
  ├── mosquitto/                     # Configuración y datos del broker MQTT (Eclipse Mosquitto)
  │   ├── config/
@@ -142,6 +150,38 @@ Desde ahí se puede:
 - Probarlos en vivo con el botón **"Try it out"**, sin necesidad de Postman, Insomnia ni escribir `curl` a mano.
 - Compartir la API con terceros (compañeros, profesores) simplemente enviando esa URL — ideal para demos académicas.
 - Para que las pruebas devuelvan datos reales (y no error 500), asegurate de tener los contenedores de Docker levantados (`docker compose up -d`, ver paso 1 más arriba).
+
+---
+
+## 📡 Nodo LoRaWAN (ChirpStack v4 + AU915)
+
+El sketch en `firmware/nodo_lorawan/nodo_lorawan.ino` implementa el nodo oficial compatible con el banco LoRaWAN del aula (Gateway Milesight UG y ChirpStack v4).
+
+### 1. Requisitos en Arduino IDE
+* Placa: **XIAO_ESP32S3**
+* Opción obligatoria: **USB CDC On Boot: Enabled**
+* Librerías: `RadioLib` (>= 7.0), `DallasTemperature`, `OneWire`, `U8g2`, `RTClib`.
+
+### 2. Configurar Credenciales OTAA
+1. Solicitar al docente las claves individuales (`DEV_EUI`, `JOIN_EUI`, `APP_KEY`).
+2. Copiar la plantilla:
+   ```bash
+   cd firmware/nodo_lorawan
+   cp credenciales.h.example credenciales.h
+   ```
+3. Completar las claves en `credenciales.h` (este archivo está en `.gitignore` y **no se sube al repositorio**).
+
+### 3. Cargar el Codec en ChirpStack
+En la interfaz web de ChirpStack (`Device profiles -> [Perfil] -> Codec -> Payload codec: JavaScript functions`), pegar el contenido de:
+`configuration/codec-heladera.js`
+
+Este decodificador desempaqueta los 4 bytes de telemetría y genera:
+```json
+{
+  "contador": 10,
+  "temperatura": 4.15
+}
+```
 
 ---
 

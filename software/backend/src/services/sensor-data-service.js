@@ -107,9 +107,21 @@ class SensorDataService {
       // Caso 1: Formato JSON
       if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
         const json = JSON.parse(trimmed);
-        parsedTemp = json.temperature ?? json.temperatura ?? json.temp;
-        parsedRssi = json.rssi ?? json.signal;
-        parsedDevice = json.deviceId ?? json.device ?? "Heladera1";
+
+        // Soporte nativo para eventos de uplink de ChirpStack v4
+        if (json.object) {
+          parsedTemp = json.object.temperatura ?? json.object.temperature ?? json.object.temp;
+          if (json.deviceInfo && json.deviceInfo.deviceName) {
+            parsedDevice = json.deviceInfo.deviceName;
+          }
+          if (Array.isArray(json.rxInfo) && json.rxInfo.length > 0 && json.rxInfo[0].rssi !== undefined) {
+            parsedRssi = json.rxInfo[0].rssi;
+          }
+        } else {
+          parsedTemp = json.temperature ?? json.temperatura ?? json.temp;
+          parsedRssi = json.rssi ?? json.signal;
+          parsedDevice = json.deviceId ?? json.device ?? "Heladera1";
+        }
       } 
       // Caso 2: Formato texto de firmware ESP32 "Heladera1:3.85" o "3.85"
       else if (trimmed.includes(":")) {

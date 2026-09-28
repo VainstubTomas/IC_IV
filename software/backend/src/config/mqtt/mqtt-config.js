@@ -37,12 +37,13 @@ function init(io, persistHandler) {
     client.on("connect", () => {
         console.log("[mqtt-config] cliente mqtt conectado al broker 🔌");
         
-        // topic base subscription
-        client.subscribe(TOPICS.STATUSBASE, (err) => {
+        // topic base subscription (soporta tanto iciv/# como ChirpStack application/+/device/+/event/up)
+        const subTopics = [TOPICS.STATUSBASE, TOPICS.CHIRPSTACK_UP];
+        client.subscribe(subTopics, (err) => {
             if (err) {
                 console.log('[mqtt-config] Error al suscribirse a tópicos:', err);
             } else {
-                console.log(`[mqtt-config] Suscrito a la base de topicos ${TOPICS.STATUSBASE}`);
+                console.log(`[mqtt-config] Suscrito a los tópicos: ${subTopics.join(', ')}`);
             }
         });
     });

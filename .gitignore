@@ -17,6 +17,10 @@ mosquitto/log/
 *.sqlite3
 mongo-data/
 
+# Claves y credenciales LoRaWAN (OTAA)
+credenciales.h
+*/credenciales.h
+
 # Archivos de sistema operativo e IDEs
 .DS_Store
 Thumbs.db
