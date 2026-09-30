@@ -1,6 +1,8 @@
 import 'dotenv/config';
 
 export default {
+    AURA_DEVICE_ID: process.env.AURA_DEVICE_ID,
+    AURA_CONFIG_EXPERIMENTAL: process.env.AURA_CONFIG_EXPERIMENTAL === "true",
     BDURL: process.env.BDURL,
     SERVERPORT: process.env.SERVERPORT,
     BROKERURL: process.env.BROKERURL,

@@ -1,11 +1,13 @@
+import { isDeviceId } from "../config/mqtt/aura-protocol.js";
 import thresholdRepository from "../repository/threshold-repository.js";
-import mqttConfig from "../config/mqtt/mqtt-config.js";
+import config from "../config/config.js";
 
 class ThresholdService {
   /**
    * Obtiene el umbral vigente de un dispositivo
    */
-  async getThresholds(deviceId = "Heladera1") {
+  async getThresholds(deviceId = config.AURA_DEVICE_ID) {
+    if (!isDeviceId(deviceId)) return { deviceId: null, min: null, max: null, configured: false };
     const config = await thresholdRepository.getByDevice(deviceId);
 
     if (!config) {
@@ -29,11 +31,12 @@ class ThresholdService {
   /**
    * Guarda el umbral de un dispositivo
    */
-  async saveThresholds({ deviceId = "Heladera1", min, max }) {
+  async saveThresholds({ deviceId = config.AURA_DEVICE_ID, min, max }) {
+    if (!isDeviceId(deviceId)) throw new Error("Configurar el UUID AURA para los umbrales");
     const minVal = Number(min);
     const maxVal = Number(max);
 
-    if (isNaN(minVal) || isNaN(maxVal)) {
+    if (min === null || max === null || !Number.isFinite(minVal) || !Number.isFinite(maxVal)) {
       throw new Error("Los umbrales 'min' y 'max' deben ser números válidos.");
     }
 
@@ -43,11 +46,7 @@ class ThresholdService {
 
     const saved = await thresholdRepository.upsert({ deviceId, min: minVal, max: maxVal });
 
-    mqttConfig.publishCommand(
-      "threshold",
-      JSON.stringify({ deviceId: saved.deviceId, min: saved.min, max: saved.max }),
-      { retain: true }
-    );
+    // Umbrales de email: viven solo en la plataforma, no son configuracion del nodo.
 
     return {
       deviceId: saved.deviceId,

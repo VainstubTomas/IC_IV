@@ -55,7 +55,7 @@ void actualizarPantalla(float temp, uint16_t contador, const char* estadoLoRa) {
 
   // 3. Temperatura
   char bufTemp[24];
-  if (temp > -55.0 && temp < 125.0) {
+  if (isfinite(temp) && temp >= -60.0 && temp <= 130.0) {
     snprintf(bufTemp, sizeof(bufTemp), "Temp: %.2f C", temp);
   } else {
     snprintf(bufTemp, sizeof(bufTemp), "Temp: Error sensor");

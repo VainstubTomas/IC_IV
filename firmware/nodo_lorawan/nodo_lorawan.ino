@@ -1,7 +1,7 @@
 /*
  * Banco LoRaWAN UNRaf — Nodo de Telemetría (Heladera Industrial)
  *
- * Manda periódicamente el contador de envíos y la temperatura de la sonda DS18B20
+ * Manda la temperatura DS18B20; conserva contador local y recibe configuracion remota
  * por LoRaWAN (AU915 OTAA) al gateway Milesight UG de la cátedra, que lo reenvía
  * al Network Server ChirpStack v4.
  *
@@ -9,7 +9,7 @@
  * SENSORES: Sonda DS18B20 (1-Wire en pin D2), pantalla OLED SH1106 + RTC DS3231 (I2C en D4/D5)
  *
  * DEPENDENCIAS EN ARDUINO IDE:
- *   - RadioLib (>= 7.0)
+ *   - RadioLib 7.7.1 (API de referencia comprobada)
  *   - DallasTemperature & OneWire
  *   - U8g2 & RTClib
  *
@@ -27,6 +27,12 @@
 #include "credenciales.h"
 #include "temp_sensor.h"
 #include "oled_rtc.h"
+#include "config_nodo.h"
+
+// Activar solo en banco acordado: el contrato aun no define el reporte FPort 11.
+#ifndef ICIV_REPORTE_CONFIG_EXPERIMENTAL
+#define ICIV_REPORTE_CONFIG_EXPERIMENTAL 0
+#endif
 
 // ===== PERSISTENCIA EN NVS =====
 Preferences almacen;
@@ -53,17 +59,18 @@ LoRaWANNode node(&radio, &Region, SUBBANDA);
 
 // Data rate fijo para validaciones de enlace
 // DR2 = SF10 a 125 kHz (cumple dwell-time en AU915 con margen)
-const bool    USAR_ADR = false;
-const uint8_t DATARATE = 2;
+ConfigNodo configNodo = configPorDefecto();
+bool reportePendiente = true;
+uint8_t puertoEnvio = 1;
+bool confirmadoEnvio = true;
 
 // ===== TEMPORIZACIÓN =====
-const unsigned long INTERVALO_ENVIO = 20000UL;  // 20 segundos
+unsigned long intervaloEnvio() { return uint32_t(configNodo.intervaloSeg) * 1000UL; }
 unsigned long ultimoEnvio = 0;
 
 uint16_t contador = 0;
 
 // ===== CONFIGURACIÓN DE CONFIRMACIÓN Y REINTENTOS =====
-const bool          CONFIRMADO   = true;
 const uint8_t       MAX_INTENTOS = 3;
 const unsigned long ESPERA_BASE  = 2000UL;
 const unsigned long ESPERA_AZAR  = 1000UL;
@@ -75,7 +82,10 @@ bool intentarEnvio(const uint8_t* payload, size_t tam, uint8_t intento);
 void esperarReintento(uint8_t intento);
 void reunirse();
 void guardarBuffer(const char* clave, const uint8_t* buf, size_t tam);
-void restaurarBuffer(const char* clave, size_t tam, bool esNonce);
+bool restaurarBuffer(const char* clave, size_t tam, bool esNonce);
+void cargarConfig();
+void procesarConfig(const uint8_t* datos, size_t tam);
+void enviarReporte();
 void detener();
 
 // ===== SETUP =====
@@ -119,11 +129,13 @@ void setup() {
   node.beginOTAA(JOIN_EUI, DEV_EUI, nullptr, APP_KEY);
 
   // Restaurar nonces y sesión previa desde NVS
-  almacen.begin(NVS_ESPACIO, false);
+  if (!almacen.begin(NVS_ESPACIO, false)) detener();
+  cargarConfig();
   restaurarBuffer(NVS_NONCES, RADIOLIB_LORAWAN_NONCES_BUF_SIZE, true);
   restaurarBuffer(NVS_SESION, RADIOLIB_LORAWAN_SESSION_BUF_SIZE, false);
 
   estado = node.activateOTAA();
+  guardarBuffer(NVS_NONCES, node.getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
   if (estado != RADIOLIB_LORAWAN_NEW_SESSION && estado != RADIOLIB_LORAWAN_SESSION_RESTORED) {
     Serial.print(F("FALLO, codigo "));
     Serial.println(estado);
@@ -149,16 +161,17 @@ void setup() {
   Serial.println();
 
   // Forzar primer envío de inmediato
-  ultimoEnvio = millis() - INTERVALO_ENVIO;
+  ultimoEnvio = millis() - intervaloEnvio();
 }
 
 // ===== LOOP PRINCIPAL =====
 void loop() {
   unsigned long ahora = millis();
 
-  if (ahora - ultimoEnvio >= INTERVALO_ENVIO) {
+  if (ahora - ultimoEnvio >= intervaloEnvio()) {
     ultimoEnvio = ahora;
-    enviarTelemetria();
+    if (ICIV_REPORTE_CONFIG_EXPERIMENTAL && reportePendiente) enviarReporte();
+    else enviarTelemetria();
   }
 
   delay(50);
@@ -169,11 +182,14 @@ void enviarTelemetria() {
   // 1. Leer sonda física DS18B20
   leerTemperatura();
   float temp = temperaturaActual;
+  if (isfinite(temp)) temp += configNodo.offsetCentesimas / 100.0f;
+  puertoEnvio = 1;
+  confirmadoEnvio = configNodo.confirmado;
 
   // 2. Empaquetar payload binario de 4 bytes:
   //    Bytes 0-1: contador (uint16 big-endian)
   //    Bytes 2-3: temperatura * 100 (int16 big-endian, con signo para temperaturas bajo cero)
-  int16_t tempRaw = (int16_t)round(temp * 100.0f);
+  int16_t tempRaw = isfinite(temp) ? (int16_t)round(temp * 100.0f) : 0x7FFF;
 
   uint8_t payload[4];
   payload[0] = (contador >> 8) & 0xFF;
@@ -207,7 +223,7 @@ void enviarTelemetria() {
   }
 
   if (entregado) {
-    actualizarPantalla(temp, contador, "Uplink ACK OK");
+    actualizarPantalla(temp, contador, confirmadoEnvio ? "Uplink ACK OK" : "Uplink enviado");
   } else {
     Serial.println(F("[TX] PERDIDO: Se agotaron los reintentos permitidos."));
     actualizarPantalla(temp, contador, "TX PERDIDO (Sin ACK)");
@@ -220,7 +236,13 @@ bool intentarEnvio(const uint8_t* payload, size_t tam, uint8_t intento) {
   LoRaWANEvent_t bajada = {};
 
   // sendReceive realiza la transmisión y abre las ventanas RX1 y RX2
-  int estado = node.sendReceive(payload, tam, 1, CONFIRMADO, nullptr, &bajada);
+  uint8_t datosBajada[242] = {};
+  size_t tamBajada = sizeof(datosBajada);
+  const bool confirmadoActual = confirmadoEnvio;
+  int estado = node.sendReceive(payload, tam, puertoEnvio, datosBajada, &tamBajada, confirmadoActual, nullptr, &bajada);
+  if (estado > 0 && bajada.fPort == PUERTO_CONFIG && tamBajada > 0) {
+    procesarConfig(datosBajada, tamBajada);
+  }
 
   // Guardar la sesión en NVS tras cada intento para mantener FCnt sincronizado
   guardarBuffer(NVS_SESION, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
@@ -237,13 +259,13 @@ bool intentarEnvio(const uint8_t* payload, size_t tam, uint8_t intento) {
     return false;
   }
 
-  if (CONFIRMADO && !bajada.confirming) {
+  if (confirmadoActual && !bajada.confirming) {
     Serial.println(F("Sin confirmacion ACK del servidor"));
     return false;
   }
 
   if (estado > 0) {
-    Serial.print(CONFIRMADO ? F("Confirmado, ACK en RX") : F("Enviado + Downlink en RX"));
+    Serial.print(confirmadoEnvio ? F("Confirmado, ACK en RX") : F("Enviado + Downlink en RX"));
     Serial.println(estado);
   } else {
     Serial.println(F("Enviado correctamente"));
@@ -279,28 +301,75 @@ void reunirse() {
 }
 
 void fijarDatarate() {
-  if (USAR_ADR) {
-    node.setADR(true);
-    Serial.println(F("Modo ADR activo."));
-  } else {
-    node.setADR(false);
-    node.setDataRate(DATARATE);
-    Serial.print(F("Data rate fijo: DR"));
-    Serial.print(DATARATE);
-    Serial.println(F(" (SF10)"));
+  node.setADR(configNodo.adr);
+  if (!configNodo.adr && node.setDatarate(configNodo.dr) != RADIOLIB_ERR_NONE) {
+    Serial.println(F("Data rate rechazado: nodo detenido para no informar configuracion falsa"));
+    detener();
   }
+}
+
+void cargarConfig() {
+  uint8_t bytes[TAM_CONFIG];
+  ConfigNodo guardada;
+  if (almacen.getBytesLength("config") == TAM_CONFIG &&
+      almacen.getBytes("config", bytes, TAM_CONFIG) == TAM_CONFIG &&
+      decodificarConfig(bytes, TAM_CONFIG, guardada)) configNodo = guardada;
+}
+
+void procesarConfig(const uint8_t* datos, size_t tam) {
+  ConfigNodo candidata;
+  if (!decodificarConfig(datos, tam, candidata)) {
+    Serial.println(F("[CONFIG] Rechazada: longitud/version/rango invalido"));
+    return;
+  }
+  // Aplicar radio antes de persistir; restaurar el estado previo si algo falla.
+  node.setADR(candidata.adr);
+  if (!candidata.adr && node.setDatarate(candidata.dr) != RADIOLIB_ERR_NONE) {
+    fijarDatarate();
+    Serial.println(F("[CONFIG] Rechazada por RadioLib"));
+    return;
+  }
+  if (almacen.putBytes("config", datos, tam) != tam) {
+    fijarDatarate();
+    Serial.println(F("[CONFIG] Error NVS: no aplicada"));
+    return;
+  }
+  configNodo = candidata;
+  reportePendiente = true;
+  Serial.println(F("[CONFIG] Validada, guardada y aplicada; reporte pendiente"));
+}
+
+void enviarReporte() {
+  uint8_t bytes[TAM_CONFIG];
+  codificarConfig(configNodo, bytes);
+  puertoEnvio = PUERTO_REPORTE;
+  confirmadoEnvio = configNodo.confirmado;
+  reportePendiente = false;
+  bool entregado = false;
+  for (uint8_t intento = 1; intento <= MAX_INTENTOS && !entregado; ++intento) {
+    if (intento > 1) esperarReintento(intento);
+    entregado = intentarEnvio(bytes, sizeof(bytes), intento);
+  }
+  // Un downlink recibido durante el reporte puede dejar otro reporte pendiente.
+  // Tras agotar intentos se sigue midiendo; no bloquear la telemetria.
+  Serial.println(entregado ? F("[CONFIG] Reporte enviado") : F("[CONFIG] Reporte sin confirmar"));
 }
 
 void guardarBuffer(const char* clave, const uint8_t* buf, size_t tam) {
   if (!buf || tam == 0) return;
-  almacen.putBytes(clave, buf, tam);
+  if (almacen.putBytes(clave, buf, tam) != tam) {
+    Serial.println(F("Error NVS: persistencia LoRaWAN fallida"));
+    detener();
+  }
 }
 
-void restaurarBuffer(const char* clave, size_t tam, bool esNonce) {
-  if (!almacen.isKey(clave)) return;
-  uint8_t* destino = esNonce ? node.getBufferNonces() : node.getBufferSession();
-  if (!destino) return;
-  almacen.getBytes(clave, destino, tam);
+bool restaurarBuffer(const char* clave, size_t tam, bool esNonce) {
+  if (almacen.getBytesLength(clave) != tam) return false;
+  uint8_t buffer[RADIOLIB_LORAWAN_SESSION_BUF_SIZE > RADIOLIB_LORAWAN_NONCES_BUF_SIZE
+    ? RADIOLIB_LORAWAN_SESSION_BUF_SIZE : RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
+  if (tam > sizeof(buffer) || almacen.getBytes(clave, buffer, tam) != tam) return false;
+  int16_t estado = esNonce ? node.setBufferNonces(buffer) : node.setBufferSession(buffer);
+  return estado == RADIOLIB_ERR_NONE;
 }
 
 void detener() {

@@ -1,3 +1,4 @@
+import config from "../config/config.js";
 import thresholdService from "../services/threshold-service.js";
 
 class ThresholdController {
@@ -7,7 +8,7 @@ class ThresholdController {
    */
   async getThresholds(req, res) {
     try {
-      const deviceId = req.query.deviceId || "Heladera1";
+      const deviceId = req.query.deviceId || config.AURA_DEVICE_ID;
       const thresholds = await thresholdService.getThresholds(deviceId);
       return res.status(200).json(thresholds);
     } catch (error) {

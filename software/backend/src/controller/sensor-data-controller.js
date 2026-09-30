@@ -1,5 +1,4 @@
 import sensorDataService from "../services/sensor-data-service.js";
-import mqttConfig from "../config/mqtt/mqtt-config.js";
 
 class SensorDataController {
   /**
@@ -84,25 +83,7 @@ class SensorDataController {
    * Forzar lectura inmediata enviando comando MQTT hacia el nodo
    */
   async forceRead(req, res) {
-    try {
-      const published = mqttConfig.publishCommand("analog", "force_read");
-
-      // Consultar la última lectura para responder
-      const latest = await sensorDataService.getLatestTelemetry();
-
-      return res.status(200).json({
-        status: "ok",
-        mensaje: "Comando de lectura forzada emitido",
-        mqttSent: published,
-        telemetria: latest
-      });
-    } catch (error) {
-      console.error("[controller] Error en forceRead:", error);
-      return res.status(500).json({
-        status: "error",
-        message: "Error al forzar la lectura del dispositivo"
-      });
-    }
+    return res.status(409).json({ message: 'Lectura forzada pendiente de definir con AURA. El nodo clase A recibe downlinks despues de un uplink.' });
   }
 
   /**

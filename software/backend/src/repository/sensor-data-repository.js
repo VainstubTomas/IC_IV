@@ -16,8 +16,8 @@ class SensorDataRepository {
   /**
    * Obtiene la lectura más reciente
    */
-  async getLatest() {
-    return await SensorData.findOne()
+  async getLatest(deviceId) {
+    return await SensorData.findOne({ deviceId })
       .sort({ createdAt: -1 })
       .lean();
   }
@@ -26,9 +26,9 @@ class SensorDataRepository {
    * Obtiene el historial de lecturas ordenadas cronológicamente descendente
    * @param {number} limit - Cantidad máxima de registros
    */
-  async getHistory(limit = 50) {
+  async getHistory(limit = 50, deviceId) {
     const parsedLimit = Math.min(Math.max(1, parseInt(limit) || 50), 500);
-    return await SensorData.find()
+    return await SensorData.find({ deviceId })
       .sort({ createdAt: -1 })
       .limit(parsedLimit)
       .lean();

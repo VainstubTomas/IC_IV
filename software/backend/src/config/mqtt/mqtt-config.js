@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 import fs from "fs";
 import config from "../config.js";
-import { TOPICS } from "./mqtt-topics.js";
+import { TOPICS, commandTopic } from "./mqtt-topics.js";
 
 // broker config
 const MQTTBROKERURL = config.MQTTBROKERURL;
@@ -37,8 +37,8 @@ function init(io, persistHandler) {
     client.on("connect", () => {
         console.log("[mqtt-config] cliente mqtt conectado al broker 🔌");
         
-        // topic base subscription (soporta tanto iciv/# como ChirpStack application/+/device/+/event/up)
-        const subTopics = [TOPICS.STATUSBASE, TOPICS.CHIRPSTACK_UP];
+        // Consumir exclusivamente el broker de AURA; ChirpStack pertenece al bridge.
+        const subTopics = [TOPICS.DATA, TOPICS.STATUS, TOPICS.RESPONSE];
         client.subscribe(subTopics, (err) => {
             if (err) {
                 console.log('[mqtt-config] Error al suscribirse a tópicos:', err);
@@ -68,7 +68,7 @@ function init(io, persistHandler) {
             console.log(`[mqtt-config] Tópico: ${topic}, Payload: ${payload}`);
 
             let savedData = null;
-            if (typeof persistHandler === 'function') {
+            if (topic.endsWith('/data') && typeof persistHandler === 'function') {
                 try {
                     savedData = await persistHandler(topic, payload);
                 } catch (serviceErr) {
@@ -89,39 +89,18 @@ function init(io, persistHandler) {
 
 /**
  * Publica un comando de control en el tópico MQTT.
- * @param {string} type - 'analogico'
- * @param {string} payload - El valor del comando (ej: '150' o '1').
+ * @param {string} deviceId - UUID AURA
+ * @param {object} message - command, params y command_id.
  */
 
-function publishCommand(type, payload, options = {}) {
-    if (!client || !client.connected) {
-        console.error('[mqtt-config] No se puede publicar porque el cliente MQTT no está conectado.');
-        return false;
-    }
-
-    let topic;
-
-    // select topic
-    switch(type) {
-        case "analog":
-            topic = TOPICS.CMDANALOG;
-            break;
-        case "threshold":
-            topic = TOPICS.CMDTHRESHOLD;
-            break;
-        default:
-            console.log(`[mqtt-config] comando desconocido ${type}`);
-            return false;
-    }
-
-    // payload publish
-    client.publish(topic, String(payload), { qos: 0, retain: false, ...options }, (err) => {
-        if (err) {
-            console.log(`[mqtt-config] Error al publicar en ${topic}:`, err);
-        } else {
-            console.log(`[mqtt-config] Comando publicado: ${topic} -> ${payload}`);
-        }
+async function publishCommand(deviceId, message) {
+    const topic = commandTopic(deviceId);
+    if (!client || !client.connected) throw new Error('Broker AURA desconectado');
+    if (message.command !== 'set_config') throw new Error('Comando no soportado');
+    await new Promise((resolve, reject) => {
+        client.publish(topic, JSON.stringify(message), { qos: 1, retain: false }, err => err ? reject(err) : resolve());
     });
+    // Confirma publicacion MQTT, nunca ejecucion en el nodo.
     return true;
 }
 

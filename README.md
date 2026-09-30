@@ -1,193 +1,57 @@
-# ❄️ Sistema Integral IoT de Telemetría - Sistemas de refrigeración (IC_IV)
+# IC_IV — Monitoreo de heladera industrial
 
-Proyecto completo e integrado de adquisición, transporte, procesamiento y visualización de telemetría para refrigeración industrial.
+DS18B20 + OLED/RTC → XIAO ESP32-S3 / Wio-SX1262 → gateway del aula →
+ChirpStack → lorawan-bridge → broker AURA → backend → MongoDB / dashboard.
 
----
+Solo el lorawan-bridge consume ChirpStack. No levantar un stack LoRaWAN propio.
+El proyecto está adaptándose a AURA según los mails docentes. El contrato MQTT
+v2.0 aún no fue recibido; no se afirma integración completa con la plataforma.
+Ver [propuesta y registro de correcciones](docs/PROPUESTA_AURA.md).
 
-## 🏗️ Arquitectura General del Sistema
+## Firmware
 
-```
-[ Sensor DS18B20 + RTC ]
-         │ (1-Wire / I2C)
-         ▼
-[ Nodo XIAO ESP32-S3 ] ────(LoRa 915 MHz SX1262)────► [ Gateway LoRa / Broker ]
-                                                               │ (MQTT: 1883)
-                                                               ▼
-                                                  [ Docker: Eclipse Mosquitto ]
-                                                               │
-                                  ┌────────────────────────────┴───────────────────────────┐
-                                  │ (MQTT Protocol)                                        │ (WebSockets: 9001)
-                                  ▼                                                        ▼
-                    [ Backend Node.js / Express ] ────(Socket.IO)────► [ Dashboard Web Industrial ]
-                                  │                                    (HTML / CSS Grid / JS)
-                                  ▼
-                     [ Base de Datos MongoDB ]
-                         (Docker: 27017)
-```
+Sketch: firmware/nodo_lorawan/nodo_lorawan.ino. Placa XIAO_ESP32S3,
+USB CDC On Boot Enabled, monitor serie 115200. Dependencias: RadioLib 7.7.1
+(API verificada), DallasTemperature, OneWire, U8g2 y RTClib.
+Copiar credenciales.h.example a credenciales.h y completar claves únicas del
+docente. credenciales.h permanece ignorado por Git.
 
----
+AU915 sub-banda 2, clase A. Por defecto: 20 s, confirmado, DR2 fijo, ADR apagado.
+Hasta 3 intentos totales con backoff/jitter. Nonces y sesión persistidos en NVS.
+Sonda inválida = 0x7FFF; no se utiliza la temperatura interna como reemplazo.
 
-## 🧱 Estructura del repositorio
+El codec configuration/codec-heladera.js se instala en profile propio dentro de
+la aplicación aura, por la cátedra. Mediciones FPort 1: data = {temp_c} o {} si
+no hay lectura. Configuración propuesta FPort 10, reporte propuesto FPort 11;
+el mapeo del reporte a status/response sigue pendiente de acordar.
 
-```
-IC_IV/
- ├── firmware/
- │   ├── nodo_lorawan/              # Nodo LoRaWAN oficial (ChirpStack AU915 OTAA + DS18B20 + OLED)
- │   │   ├── nodo_lorawan.ino       # Lógica LoRaWAN: OTAA, NVS nonces, uplink confirmado
- │   │   ├── credenciales.h.example # Plantilla para DEV_EUI, JOIN_EUI, APP_KEY
- │   │   ├── temp_sensor.cpp/.h     # Driver DS18B20 1-Wire
- │   │   └── oled_rtc.cpp/.h        # Display OLED SH1106 + RTC DS3231
- │   └── main/                      # Firmware legacy de pruebas LoRa P2P
- │       ├── main.ino
- │       ├── temp_sensor.cpp/.h
- │       └── oled_rtc.cpp/.h
- │
- ├── configuration/
- │   └── codec-heladera.js          # Codec JavaScript para decodificar el payload en ChirpStack
- │
- ├── mosquitto/                     # Configuración y datos del broker MQTT (Eclipse Mosquitto)
- │   ├── config/
- │   │   └── mosquitto.conf         # Listeners MQTT (1883) y WebSocket (9001), persistencia
- │   ├── data/                      # Persistencia interna del broker (volumen Docker)
- │   └── log/                       # Logs del broker (volumen Docker)
- │
- ├── software/
- │   ├── backend/                   # API REST + WebSocket (Node.js / Express)
- │   │   ├── src/
- │   │   │   ├── app.js             # Configuración de la app Express (CORS, estáticos, rutas)
- │   │   │   ├── server.js          # Bootstrap del servidor HTTP + Socket.IO
- │   │   │   ├── config/
- │   │   │   │   ├── config.js              # Variables de entorno y configuración general
- │   │   │   │   ├── db-connect-config.js   # Conexión a MongoDB (Mongoose)
- │   │   │   │   ├── mqtt/
- │   │   │   │   │   ├── mqtt-config.js     # Cliente MQTT (conexión, credenciales, TLS)
- │   │   │   │   │   └── mqtt-topics.js     # Definición de tópicos MQTT del sistema
- │   │   │   │   └── mailer/
- │   │   │   │       └── mailer-config.js   # Configuración SMTP para envío de alertas
- │   │   │   ├── controller/        # Controladores HTTP (parseo de requests/responses)
- │   │   │   │   ├── sensor-data-controller.js
- │   │   │   │   ├── threshold-controller.js
- │   │   │   │   └── alert-email-controller.js
- │   │   │   ├── services/          # Lógica de negocio
- │   │   │   │   ├── sensor-data-service.js   # Parseo de mensajes MQTT/HTTP y persistencia
- │   │   │   │   ├── threshold-service.js     # Gestión de umbrales por dispositivo
- │   │   │   │   ├── alert-service.js         # Orquestación de alertas por umbral excedido
- │   │   │   │   └── alert-email-service.js   # Envío de notificaciones por correo
- │   │   │   ├── repository/        # Acceso a datos (capa sobre los modelos Mongoose)
- │   │   │   │   ├── sensor-data-repository.js
- │   │   │   │   ├── threshold-repository.js
- │   │   │   │   └── alert-email-repository.js
- │   │   │   ├── models/            # Esquemas Mongoose
- │   │   │   │   ├── sensor-data-model.js     # Lecturas de temperatura (deviceId, valor, origen)
- │   │   │   │   ├── threshold-model.js       # Umbrales min/max por dispositivo
- │   │   │   │   └── alert-email-model.js     # Emails registrados para recibir alertas
- │   │   │   └── routes/            # Definición de endpoints REST bajo /api/v1
- │   │   │       ├── index.js
- │   │   │       ├── sensor-data-routes.js
- │   │   │       ├── threshold-routes.js
- │   │   │       └── alert-email-routes.js
- │   │   ├── .env.example           # Plantilla de variables de entorno
- │   │   ├── package.json           # Dependencias (Express, Mongoose, mqtt, socket.io, nodemailer)
- │   │   └── README.md              # Documentación específica del backend
- │   │
- │   └── frontend/                  # Dashboard web estático
- │       ├── index.html             # Vista principal (consume REST + WebSocket en tiempo real)
- │       └── styles.css             # Estilos del dashboard
- │
- ├── docker-compose.yml             # Orquesta broker MQTT (mosquitto) y base de datos (MongoDB)
- ├── COMANDOS.md                    # Comandos operativos del proyecto
- └── README.md                      # Documentación general del sistema
-```
+## Backend y dashboard
 
----
+Desde software/backend: npm ci, copiar .env.example a .env y completar MongoDB,
+URL/credenciales del broker AURA y AURA_DEVICE_ID con el UUID real.
+Ejecutar npm start; abrir http://localhost:<SERVERPORT>/ (8080 en la plantilla).
+Swagger: /api-docs. El dashboard consume REST cada 5 s; backend también emite
+eventos Socket.IO. Hora mostrada = recepción, no RTC. Simulación offline identificada.
 
-## 🚀 Guía de Puesta en Marcha
+Suscripciones: devices/+/data, devices/+/status, devices/+/response. Solo se
+ingestan values.temp_c numéricos; las consultas del dashboard se filtran por
+AURA_DEVICE_ID. No hay tópicos iciv/... ni suscripción application/... en el backend.
+Umbrales de email viven en plataforma. Status/response no se interpretan como
+ejecución hasta obtener el contrato.
 
-### 1. Iniciar Infraestructura con Docker (Broker MQTT + MongoDB)
-Desde la raíz del proyecto, ejecuta:
+Configuración remota preparada como propuesta experimental, desactivada por defecto
+(AURA_CONFIG_EXPERIMENTAL=false). Habilitar solo en banco acordado con la cátedra.
+POST /api/v1/dispositivo/config recibe interval_s, confirmed, adr, dr, offset_c.
+Un 202 significa publicación MQTT y estado pendiente, no aplicación en nodo.
+Lectura forzada deshabilitada hasta definir su comando; clase A recibe luego del uplink.
 
-```bash
-# Levantar Mosquitto y MongoDB en segundo plano
-docker compose up -d
+## Pruebas locales
 
-# Verificar estado de los contenedores
-docker compose ps
+npm test desde software/backend. Verifica codec, configuración binaria, rangos,
+ingesta por UUID y publicaciones MQTT con transporte simulado. No requiere servicios.
+Si el entorno restringe subprocesses: node --test --test-isolation=none.
+Docker Compose local levanta MongoDB y Mosquitto únicamente para pruebas aisladas;
+no equivale al broker de AURA ni al servidor LoRaWAN del aula.
 
-# Ver logs del broker MQTT en tiempo real
-docker compose logs -f mqtt-broker
-```
-
-### 2. Iniciar el Backend (Node.js)
-Accede a la carpeta de software e instala las dependencias:
-
-```bash
-cd software/backend
-
-# Instalar paquetes
-npm install
-
-# Iniciar servidor
-npm start
-```
-El backend se conectará automáticamente a:
-* **MongoDB:** `mongodb://localhost:27017/iciv_db`
-* **Broker MQTT:** `mqtt://localhost:1883` (suscrito al tópico `iciv/#`)
-
-### 3. Abrir el Dashboard Frontend
-* **Opción directa:** Haz doble clic sobre `software/frontend/index.html` en tu explorador de archivos para abrirlo en el navegador.
-* Cuenta con visualización de temperatura (°C), señal LoRa RSSI (dBm), timestamp RTC, botón de "Forzar lectura" y modo simulación automático si los servicios aún no están enviando datos.
-
----
-
-## 🧪 Pruebas Rápidas y Validación de la API
-
-La API está documentada con **OpenAPI 3.0** (`swagger-jsdoc` + `swagger-ui-express`). Con el servidor corriendo, la documentación interactiva está disponible en:      
-
-http://localhost:3000/api-docs                                                                                       
-
-Desde ahí se puede:
-- Ver todos los endpoints agrupados por categoría (**Sistema**, **Telemetría**, **Umbrales**, **Alertas**), con sus parámetros, bodies y posibles respuestas.
-- Probarlos en vivo con el botón **"Try it out"**, sin necesidad de Postman, Insomnia ni escribir `curl` a mano.
-- Compartir la API con terceros (compañeros, profesores) simplemente enviando esa URL — ideal para demos académicas.
-- Para que las pruebas devuelvan datos reales (y no error 500), asegurate de tener los contenedores de Docker levantados (`docker compose up -d`, ver paso 1 más arriba).
-
----
-
-## 📡 Nodo LoRaWAN (ChirpStack v4 + AU915)
-
-El sketch en `firmware/nodo_lorawan/nodo_lorawan.ino` implementa el nodo oficial compatible con el banco LoRaWAN del aula (Gateway Milesight UG y ChirpStack v4).
-
-### 1. Requisitos en Arduino IDE
-* Placa: **XIAO_ESP32S3**
-* Opción obligatoria: **USB CDC On Boot: Enabled**
-* Librerías: `RadioLib` (>= 7.0), `DallasTemperature`, `OneWire`, `U8g2`, `RTClib`.
-
-### 2. Configurar Credenciales OTAA
-1. Solicitar al docente las claves individuales (`DEV_EUI`, `JOIN_EUI`, `APP_KEY`).
-2. Copiar la plantilla:
-   ```bash
-   cd firmware/nodo_lorawan
-   cp credenciales.h.example credenciales.h
-   ```
-3. Completar las claves en `credenciales.h` (este archivo está en `.gitignore` y **no se sube al repositorio**).
-
-### 3. Cargar el Codec en ChirpStack
-En la interfaz web de ChirpStack (`Device profiles -> [Perfil] -> Codec -> Payload codec: JavaScript functions`), pegar el contenido de:
-`configuration/codec-heladera.js`
-
-Este decodificador desempaqueta los 4 bytes de telemetría y genera:
-```json
-{
-  "contador": 10,
-  "temperatura": 4.15
-}
-```
-
----
-
-## 🛑 Detener Servicios Docker
-
-```bash
-docker compose down
-```
-*(Los datos de MongoDB y la configuración de Mosquitto se conservan en volúmenes persistentes).*
+Pendientes: contrato v2.0, aprobación de la propuesta, profile/tags/UUID, conectividad
+del bridge, compilación con todas las librerías y prueba física de downlinks/reinicios.

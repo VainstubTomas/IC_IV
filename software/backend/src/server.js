@@ -15,9 +15,7 @@ async function mainServer() {
     io.on("connection", (socket) => {
         console.log(`[server] ws: nuevo cliente conectado ${socket.id} 🔌`);
 
-        socket.on("device_command", ({ type, payload }) => {
-            mqttConfig.publishCommand(type, payload);
-        });
+
     });
 
     mqttConfig.init(io, (topic, payload) => sensorDataService.parseAndSaveMqttMessage(topic, payload));

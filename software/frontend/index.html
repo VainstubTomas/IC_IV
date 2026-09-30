@@ -89,7 +89,7 @@
           <span class="card-title">
             <span class="card-icon">⏱️</span> Última Lectura
           </span>
-          <span class="card-tag">RTC Hardware</span>
+          <span class="card-tag">Hora de recepción</span>
         </div>
         <div class="card-body">
           <div class="metric-value-container">
@@ -156,6 +156,22 @@
 
     </section>
 
+    <section class="config-grid">
+      <article class="card">
+        <div class="card-header"><span class="card-title">Configuración remota del nodo</span><span class="card-tag">Propuesta</span></div>
+        <div class="card-body">
+          <label class="input-label">Intervalo (20–3600 s)<input class="input-field" id="configInterval" type="number" min="20" max="3600" value="20"></label>
+          <label class="input-label">DR fijo (2–5)<input class="input-field" id="configDr" type="number" min="2" max="5" value="2"></label>
+          <label class="input-label">Offset (−5 a 5 °C)<input class="input-field" id="configOffset" type="number" min="-5" max="5" step="0.01" value="0"></label>
+          <label><input id="configConfirmed" type="checkbox" checked> Uplink confirmado</label>
+          <label><input id="configAdr" type="checkbox"> ADR</label>
+          <button class="btn-action" id="btnConfig" disabled onclick="enviarConfiguracion()">Enviar configuración</button>
+          <p id="configState" aria-live="polite">Propuesta pendiente de validar con la cátedra.</p>
+          <p>Clase A: el comando llega después del próximo uplink. Los umbrales de email se guardan en la plataforma.</p>
+        </div>
+      </article>
+    </section>
+
     <!-- BARRA DE ACCIONES Y CONTROLES -->
     <section class="actions-panel">
       <div class="polling-info">
@@ -163,7 +179,7 @@
         <span>Actualización automática activa cada <strong>5 segundos</strong></span>
       </div>
 
-      <button type="button" class="btn-action" id="btnForceRead" onclick="forzarLectura()">
+      <button type="button" class="btn-action" id="btnForceRead" onclick="forzarLectura()" disabled title="Comando pendiente de definir con AURA">
         <span class="btn-spinner" id="btnSpinner"></span>
         <span id="btnIcon">⚡</span>
         <span id="btnText">Forzar lectura</span>
@@ -268,11 +284,13 @@
       const qualityText = document.getElementById('rssiQualityText');
       const bars = document.querySelectorAll('#rssiBars .rssi-bar');
 
-      rssiElem.textContent = rssi;
+      rssiElem.textContent = Number.isFinite(rssi) ? rssi : '--';
 
       // Evaluar calidad de señal LoRa (típicamente -120 dBm a -50 dBm)
-      let activeBars = 1;
-      if (rssi >= -70) {
+      let activeBars = 0;
+      if (!Number.isFinite(rssi)) {
+        qualityText.textContent = 'Métrica pendiente del contrato status';
+      } else if (rssi >= -70) {
         activeBars = 4;
         qualityText.textContent = 'Excelente Cobertura';
       } else if (rssi >= -85) {
@@ -305,7 +323,7 @@
           timeElem.textContent = partes[1];
         } else {
           timeElem.textContent = timestamp;
-          dateElem.textContent = 'RTC Sincronizado';
+          dateElem.textContent = 'Hora de recepción';
         }
       }
 
@@ -341,6 +359,15 @@
         }
 
         const datos = await respuesta.json();
+        if (!datos || !Number.isFinite(datos.temperatura)) {
+          document.getElementById('tempValue').textContent = '--';
+          document.getElementById('rssiValue').textContent = '--';
+          document.getElementById('timeValue').textContent = '--:--:--';
+          document.getElementById('dateValue').textContent = 'Sin lecturas';
+          document.getElementById('statusLed').className = 'led-indicator simulation';
+          document.getElementById('statusText').textContent = 'Sin telemetría disponible';
+          return;
+        }
         actualizarUI(datos, true);
       } catch (error) {
         // En caso de error o servidor no levantado, inyectar datos simulados coherentes
@@ -353,52 +380,7 @@
      * Forzar lectura manual mediante POST /api/v1/leer
      */
     async function forzarLectura() {
-      const btn = document.getElementById('btnForceRead');
-      const btnText = document.getElementById('btnText');
-      const btnIcon = document.getElementById('btnIcon');
-
-      // Estado de carga UI
-      btn.disabled = true;
-      btn.classList.add('loading');
-      btnText.textContent = 'Solicitando...';
-      btnIcon.style.display = 'none';
-
-      try {
-        const respuesta = await fetch('/api/v1/leer', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ origen: 'dashboard_manual', trigger: 'force_read' })
-        });
-
-        if (!respuesta.ok) {
-          throw new Error(`HTTP ${respuesta.status}`);
-        }
-
-        const resultado = await respuesta.json();
-        mostrarToast('¡Lectura forzada ejecutada correctamente!', 'success');
-        
-        // Si el backend devuelve inmediatamente la telemetría, actualizamos
-        if (resultado && resultado.telemetria) {
-          actualizarUI(resultado.telemetria, true);
-        } else {
-          await obtenerTelemetria();
-        }
-      } catch (error) {
-        // Fallback simulado cuando el endpoint no está disponible
-        const datosMock = generarDatosSimulados();
-        actualizarUI(datosMock, false);
-        mostrarToast('Simulación: Comando /api/v1/leer ejecutado (Offline)', 'warning');
-      } finally {
-        // Restaurar estado del botón
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.classList.remove('loading');
-          btnText.textContent = 'Forzar lectura';
-          btnIcon.style.display = 'inline';
-        }, 500);
-      }
+      mostrarToast('Lectura forzada pendiente de definir con AURA; el nodo mide según su intervalo.', 'warning');
     }
 
     /**
@@ -581,8 +563,44 @@
       }
     }
 
+    async function cargarEstadoConfig() {
+      try {
+        const response = await fetch('/api/v1/dispositivo/config');
+        if (!response.ok) throw new Error('No disponible');
+        const result = await response.json();
+        document.getElementById('btnConfig').disabled = !result.experimental || !result.deviceId;
+        const latest = result.latest;
+        document.getElementById('configState').textContent = latest
+          ? `Comando ${latest.command_id}: ${latest.state}. Aplicación no confirmada.`
+          : result.message;
+      } catch (e) {
+        document.getElementById('btnConfig').disabled = true;
+        document.getElementById('configState').textContent = 'No se pudo consultar el estado de configuración.';
+      }
+    }
+    async function enviarConfiguracion() {
+      const btn = document.getElementById('btnConfig');
+      btn.disabled = true;
+      try {
+        const response = await fetch('/api/v1/dispositivo/config', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interval_s: Number(document.getElementById('configInterval').value),
+            confirmed: document.getElementById('configConfirmed').checked,
+            adr: document.getElementById('configAdr').checked,
+            dr: Number(document.getElementById('configDr').value),
+            offset_c: Number(document.getElementById('configOffset').value) })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+        mostrarToast('Configuración publicada: pendiente de aplicación en el nodo.', 'info');
+      } catch (e) { mostrarToast(e.message, 'warning'); }
+      finally { await cargarEstadoConfig(); }
+    }
+
     // Inicializar lectura inmediata y configurar polling de 5 segundos
     document.addEventListener('DOMContentLoaded', () => {
+      cargarEstadoConfig();
+      setInterval(cargarEstadoConfig, 5000);
       obtenerTelemetria();
       setInterval(obtenerTelemetria, 5000);
       obtenerUmbrales();
