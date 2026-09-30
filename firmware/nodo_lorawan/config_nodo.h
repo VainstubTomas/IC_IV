@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Propuesta IC_IV v1: FPort 10 (downlink), 11 (reporte). Ver docs/PROPUESTA_AURA.md.
+// Propuesta IC_IV v1: FPort 10 (downlink), 11 (reporte). Ver seccion de configuracion remota del README.md.
 const uint8_t PUERTO_CONFIG = 10;
 const uint8_t PUERTO_REPORTE = 11;
 const size_t TAM_CONFIG = 7;

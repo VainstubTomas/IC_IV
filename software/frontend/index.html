@@ -201,6 +201,7 @@
        ========================================================================== -->
   <script>
     // Variables de estado interno para simulación continua y coherente
+    let estadoDispositivo = null;
     let simulacionTemp = 3.8;
     let simulacionRssi = -78;
 
@@ -252,7 +253,8 @@
      * Actualiza todos los elementos de la interfaz con el objeto de telemetría
      */
     function actualizarUI(datos, esReal) {
-      const { temperatura, rssi, timestamp } = datos;
+      const { temperatura, timestamp } = datos;
+      const rssi = esReal ? estadoDispositivo?.device?.details?.rssi : datos.rssi;
 
       // 1. Tarjeta Temperatura
       const tempElem = document.getElementById('tempValue');
@@ -289,7 +291,7 @@
       // Evaluar calidad de señal LoRa (típicamente -120 dBm a -50 dBm)
       let activeBars = 0;
       if (!Number.isFinite(rssi)) {
-        qualityText.textContent = 'Métrica pendiente del contrato status';
+        qualityText.textContent = 'Sin RSSI disponible en status';
       } else if (rssi >= -70) {
         activeBars = 4;
         qualityText.textContent = 'Excelente Cobertura';
@@ -333,8 +335,10 @@
 
       if (esReal) {
         statusLed.className = 'led-indicator connected';
-        statusText.textContent = 'Conectado (/api/v1/telemetria/latest)';
-        statusText.style.color = 'var(--accent-emerald)';
+        const estado = describirEstadoAura(estadoDispositivo);
+        statusText.textContent = estado.text;
+        statusLed.className = estado.online ? 'led-indicator connected' : 'led-indicator simulation';
+        statusText.style.color = estado.online ? 'var(--accent-emerald)' : 'var(--accent-amber)';
       } else {
         statusLed.className = 'led-indicator simulation';
         statusText.textContent = 'Modo Simulación (Offline)';
@@ -342,11 +346,30 @@
       }
     }
 
+    function describirEstadoAura(state) {
+      if (!state) return { text: 'API disponible; estado AURA desconocido', online: false };
+      if (!state.mqttConnected) return { text: 'Backend sin conexion al broker AURA; ultima lectura guardada', online: false };
+      if (state.bridge?.status === 'offline') return { text: 'Bridge offline: no llegan dispositivos LoRaWAN', online: false };
+      if (state.device?.status === 'offline') return { text: 'Nodo offline; ultima lectura guardada', online: false };
+      if (state.device?.status === 'online') return { text: state.bridgeConfigured
+        ? (state.bridge ? 'Nodo online segun AURA' : 'Nodo online; estado del bridge desconocido')
+        : 'Nodo online; UUID del bridge no configurado', online: !!state.bridge && state.bridge.status === 'online' };
+      return { text: 'Broker conectado; sin estado del nodo', online: false };
+    }
+    async function cargarEstadoDispositivo() {
+      try {
+        const response = await fetch('/api/v1/dispositivo/status');
+        if (!response.ok) throw new Error('Estado no disponible');
+        estadoDispositivo = await response.json();
+      } catch (_) { estadoDispositivo = null; }
+    }
+
     /**
      * Función principal de sondeo (polling) GET /api/v1/telemetria/latest cada 5s
      */
     async function obtenerTelemetria() {
       try {
+        await cargarEstadoDispositivo();
         const respuesta = await fetch('/api/v1/telemetria/latest', {
           method: 'GET',
           headers: {
@@ -365,7 +388,9 @@
           document.getElementById('timeValue').textContent = '--:--:--';
           document.getElementById('dateValue').textContent = 'Sin lecturas';
           document.getElementById('statusLed').className = 'led-indicator simulation';
-          document.getElementById('statusText').textContent = 'Sin telemetría disponible';
+          document.getElementById('statusText').textContent = 'Sin telemetria. ' + describirEstadoAura(estadoDispositivo).text;
+          document.querySelectorAll('#rssiBars .rssi-bar').forEach(bar => bar.classList.remove('active'));
+          document.getElementById('rssiQualityText').textContent = 'Sin lectura disponible';
           return;
         }
         actualizarUI(datos, true);
@@ -570,8 +595,12 @@
         const result = await response.json();
         document.getElementById('btnConfig').disabled = !result.experimental || !result.deviceId;
         const latest = result.latest;
+        const labels = { publishing: 'Publicando', pending: 'Publicado; esperando al bridge',
+          publish_failed: 'Fallo de publicacion', encolado: 'Encolado en ChirpStack',
+          transmitido: 'Transmitido por radio', recibido: 'Recibido por la radio del nodo', rechazado: 'Rechazado' };
+        const reason = latest?.responseDetails?.motivo || latest?.error;
         document.getElementById('configState').textContent = latest
-          ? `Comando ${latest.command_id}: ${latest.state}. Aplicación no confirmada.`
+          ? `Comando ${latest.command_id}: ${labels[latest.state] || latest.state}${reason ? '. Motivo: ' + reason : ''}. Ejecucion no confirmada.`
           : result.message;
       } catch (e) {
         document.getElementById('btnConfig').disabled = true;

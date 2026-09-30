@@ -5,11 +5,16 @@ para una heladera industrial, desarrollado para su integración con **AURA**.
 Incluye firmware del nodo, codec, backend con persistencia y alertas por email,
 y dashboard web.
 
-La adaptación actual se basa en los mails de la cátedra. **El contrato MQTT de
-AURA v2.0 todavía no fue localizado en el material disponible**; quedan por
-acordar el reporte de configuración aplicada y la notificación de falla de sensor.
-Las pruebas locales no equivalen a una validación completa contra AURA.
+La adaptación sigue el **[contrato MQTT AURA v2.0](CONTRATO_MQTT.md)**, recibido
+y cotejado con el código. Se conserva el documento original en la raíz; sus
+referencias a FastAPI y enlaces internos describen el repo principal de AURA.
+Nuestro backend Node.js/MongoDB es el cliente y banco del proyecto IC_IV; no
+reemplaza el backend FastAPI de AURA ni resuelve sus pendientes internos.
 
+El contrato recibido declara pendientes el bridge y la persistencia MQTT de AURA.
+Confirmar con la cátedra si ya están implementados antes de probar la cadena completa.
+La configuración binaria y el reporte de falla siguen siendo propuestas de IC_IV,
+pendientes de aprobación.
 ---
 
 ## 🏗️ Arquitectura General del Sistema
@@ -94,6 +99,7 @@ IC_IV/
  │   │   │   │   ├── threshold-controller.js
  │   │   │   │   └── alert-email-controller.js
  │   │   │   ├── services/          # Lógica de negocio
+ │   │   │   │   ├── device-event-service.js  # Status y response del contrato v2
  │   │   │   │   ├── sensor-data-service.js   # Parseo de mensajes MQTT/HTTP y persistencia
  │   │   │   │   ├── threshold-service.js     # Gestión de umbrales por dispositivo
  │   │   │   │   ├── alert-service.js         # Orquestación de alertas por umbral excedido
@@ -105,6 +111,7 @@ IC_IV/
  │   │   │   ├── models/            # Esquemas Mongoose
  │   │   │   │   ├── sensor-data-model.js     # Lecturas de temperatura (deviceId, valor, origen)
  │   │   │   │   ├── threshold-model.js       # Umbrales min/max por dispositivo
+ │   │   │   │   ├── device-status-model.js  # Estado del nodo y LWT del bridge
  │   │   │   │   ├── device-command-model.js # Registro de comandos y estado pendiente
  │   │   │   │   └── alert-email-model.js     # Emails registrados para recibir alertas
  │   │   │   └── routes/            # Definición de endpoints REST bajo /api/v1
@@ -113,6 +120,7 @@ IC_IV/
  │   │   │       ├── threshold-routes.js
  │   │   │       ├── device-config-routes.js # API experimental de configuración remota
  │   │   │       └── alert-email-routes.js
+ │   │   ├── scripts/prueba-contrato.ps1 # Prueba local de mensajes y duplicados
  │   │   ├── test/aura.test.js      # Pruebas locales del codec, MQTT e ingesta
  │   │   ├── .env.example           # Plantilla de variables de entorno
  │   │   ├── package.json           # Dependencias (Express, Mongoose, mqtt, socket.io, nodemailer)
@@ -123,6 +131,7 @@ IC_IV/
  │       └── styles.css             # Estilos del dashboard
  │
  ├── docker-compose.yml             # Orquesta broker MQTT (mosquitto) y base de datos (MongoDB)
+ ├── CONTRATO_MQTT.md              # Contrato AURA v2.0 recibido de la cátedra
  ├── COMANDOS.md                    # Comandos operativos del proyecto
  └── README.md                      # Documentación general del sistema
 ```
@@ -186,6 +195,8 @@ Editar `.env` antes de iniciar. La copia condicional conserva una configuración
 | `BDURL` | MongoDB; local: `mongodb://localhost:27017/iciv_db` |
 | `MQTTBROKERURL` | URL del broker AURA; en prueba aislada: `mqtt://localhost:1883` |
 | `AURA_DEVICE_ID` | UUID del dispositivo AURA; no DevEUI ni `Heladera1` |
+| `AURA_BRIDGE_DEVICE_ID` | UUID del bridge para leer su LWT; solicitar a la cátedra |
+| `MQTT_CLIENT_ID` | ID estable, exclusivo de esta instancia; conservar al reiniciar |
 | `AURA_CONFIG_EXPERIMENTAL` | Mantener `false` hasta acordar la propuesta con la cátedra |
 | `BROKERUSERNAME`, `BROKERPASSW` | Credenciales MQTT si el broker requiere autenticación |
 | `MQTTBROKERCAPATH` | Ruta al certificado CA cuando corresponda |
@@ -204,7 +215,22 @@ npm start
 Confirmar en terminal conexión a MongoDB, conexión MQTT y suscripciones
 `devices/+/data`, `devices/+/status`, `devices/+/response`.
 Se guardan únicamente mediciones numéricas `values.temp_c` del dispositivo configurado.
-Los esquemas de `status` y `response` quedan pendientes del contrato v2.0.
+Las suscripciones y comandos usan **QoS 1**. Sesión persistente (`clean=false`)
+y `MQTT_CLIENT_ID` estable permiten que el broker conserve mensajes QoS 1 durante
+desconexiones, según su configuración y límites. No usar el mismo ID en dos instancias.
+MongoDB e índices se inicializan antes de conectar MQTT; PUBACK espera persistencia.
+Si hay un error transitorio de DB, se reintenta el mensaje sin confirmarlo.
+
+`ingest_id` es opcional: si viene como UUID se deduplica con índice único persistente.
+Sin ese campo no es posible distinguir dos entregas del mismo evento. Los reintentos
+de radio pueden ser eventos distintos; no se deduplican por temperatura ni contador.
+Un duplicado no vuelve a disparar el chequeo de alertas.
+
+`status` guarda `online`/`offline` y `details` por UUID. RSSI se lee de
+`details.rssi`. El estado offline del bridge tiene prioridad sobre el último online
+del nodo. `response` correlaciona UUID + `details.command_id`, conserva historial y
+acepta solo `encolado`, `transmitido`, `recibido`, `rechazado`. Se evitan regresiones
+por respuestas tardías. Todos mantienen `confirma_ejecucion=false`.
 
 ### 4. Abrir el Dashboard Frontend
 
@@ -218,7 +244,8 @@ y configuración remota. Consulta la API cada 5 segundos.
 - Sin registros válidos muestra ausencia de telemetría; el backend no inventa una lectura inicial.
 - Si falla la consulta, el frontend muestra datos simulados identificados como **Modo Simulación (Offline)**.
 - La hora del dashboard corresponde al registro en MongoDB; el RTC se usa en la OLED del nodo.
-- RSSI aparece sin valor cuando no hay una métrica disponible; falta acordar su extracción de `status`.
+- RSSI proviene de `status.details.rssi`; queda sin valor si no llegó esa métrica.
+- El indicador distingue desconexión del broker, bridge offline, nodo offline y estado desconocido. No supone conexión física por responder la API.
 - **Forzar lectura** está deshabilitado hasta definir ese comando con AURA.
 - Los umbrales de email viven en la plataforma; no se envían al firmware.
 
@@ -240,9 +267,9 @@ Si el entorno impide crear procesos secundarios:
 node --test --test-isolation=none
 ```
 
-Las cinco pruebas cubren temperatura positiva/negativa y centinela, configuración
+Las pruebas cubren temperatura positiva/negativa y centinela, configuración
 binaria y rangos, UUID y mediciones AURA, MQTT con transporte simulado y servicio
-de ingesta. No comprueban gateway, AURA, SMTP ni hardware real.
+de ingesta, deduplicación, persistencia antes de PUBACK, estados del bridge y correlación de respuestas. Usan dobles de prueba para transporte y DB; no comprueban gateway, AURA, MongoDB real, SMTP ni hardware.
 
 ### 2. Verificar API y dashboard con un mensaje de prueba
 
@@ -251,7 +278,7 @@ configurado en `.env`. Desde la raíz del proyecto, publicar:
 
 ```powershell
 $mensajePrueba = '{"values":{"temp_c":4.25}}'
-$mensajePrueba | docker compose exec -T mqtt-broker mosquitto_pub -h localhost -t "devices/650e8400-e29b-41d4-a716-446655440001/data" -s
+$mensajePrueba | docker compose exec -T mqtt-broker mosquitto_pub -q 1 -h localhost -t "devices/650e8400-e29b-41d4-a716-446655440001/data" -s
 ```
 
 Ese mensaje es **telemetría de prueba**, aunque el dashboard lo muestre como dato
@@ -266,6 +293,19 @@ Invoke-RestMethod "http://localhost:8080/api/v1/telemetria/history?limit=20"
 La última lectura debe incluir `temperatura: 4.25` y el UUID del tópico.
 El dashboard debe actualizarse en el siguiente sondeo. No ejecutar este ejemplo
 contra el broker de producción de AURA.
+
+Para probar datos duplicados y estados del bridge en el broker local:
+
+```powershell
+cd software/backend
+./scripts/prueba-contrato.ps1
+```
+
+Usar el UUID de ejemplo configurado en .env y el backend corriendo. El script
+publica dos veces el mismo ingest_id con QoS 1 y comprueba un solo registro;
+también simula bridge offline. Es tráfico de prueba, no radio real. Opcionalmente
+`-ProbarComandos` prueba response con configuración experimental habilitada,
+siempre en el banco local y nunca contra AURA real.
 
 ### 3. Documentación interactiva y endpoints
 
@@ -282,6 +322,7 @@ configuración remota nuevas se describen aquí y todavía no tienen anotaciones
 | `GET /api/v1/umbrales`, `POST /api/v1/umbrales` | Configuración de alertas de plataforma |
 | `GET /api/v1/alertas/emails`, `POST /api/v1/alertas/emails` | Destinatarios de alertas |
 | `DELETE /api/v1/alertas/emails/:id` | Eliminar destinatario |
+| `GET /api/v1/dispositivo/status` | Estado guardado de nodo/bridge y conexión MQTT actual |
 | `GET /api/v1/dispositivo/config` | Habilitación experimental y último comando |
 | `POST /api/v1/dispositivo/config` | Propuesta de configuración; `409` si está deshabilitada, `202` si se publica |
 | `POST /api/v1/leer` | `409`: lectura forzada aún no acordada |
@@ -376,7 +417,7 @@ La API genera `command_id` y publica en `devices/<UUID>/command`:
 ```
 
 Un `202` indica publicación MQTT, **no ejecución en el nodo**. Clase A recibe
-el downlink después del próximo uplink; la interfaz conserva estado pendiente.
+el downlink después del próximo uplink; la interfaz sigue los estados del bridge, sin afirmar ejecución.
 `command_id` no está incluido en los 7 bytes, por lo que aún no hay correlación
 de ejecución de punta a punta.
 
@@ -387,6 +428,27 @@ solo en una compilación de banco acordada. `decodeConfigReport` permite
 interpretarlo en pruebas, pero `decodeUplink` rechaza ese puerto para no publicar
 configuración como medición. Su traslado a `status`/`response` debe acordarse.
 
+### Propuesta de reporte de falla de sensor (no implementada ni normativa)
+
+El contrato reserva alerts/... y aún no define notificación de falla. No se
+publica allí. Para discutir en clase proponemos un uplink diagnóstico separado,
+FPort 12, tres bytes: versión 1, sensor 1 (DS18B20), estado 0 (recuperado) o 1
+(sin lectura). Se emitiría solo al cambiar de estado. Puerto y bytes están sujetos
+a revisión; firmware/codec actuales NO transmiten ni decodifican este formato.
+
+Proponemos que el bridge lo traduzca al status del dispositivo conservando
+`status=online` porque falla el sensor, no la comunicación. Ejemplo de extensión
+de details para revisión docente (NO emitir hasta incorporarla al contrato):
+
+```json
+{"status":"online","details":{"evento":"sensor","sensor":"ds18b20","estado_sensor":"sin_lectura"}}
+```
+
+La recuperación usaría `estado_sensor=recuperado`. Debe acordarse una ruta de
+diagnósticos que no coloque estos campos en values; el bridge actual especificado
+es opaco a las mediciones. El centinela y la omisión de temp_c ya funcionan, pero
+no equivalen a esta notificación. Ningún campo propuesto se publica en producción.
+
 ### 5. Lista de comprobación en hardware
 
 1. Confirmar join y recepción de `temp_c` por la cadena completa de AURA.
@@ -396,6 +458,13 @@ configuración como medición. Su traslado a `status`/`response` debe acordarse.
 5. En banco acordado, probar configuración válida, rechazo de valores fuera de rango
    y conservación en NVS tras reiniciar.
 6. Verificar demora clase A y revisar con la cátedra reporte de aplicación y falla.
+7. Confirmar QoS 1, repetir un ingest_id y revisar un solo registro; probar reinicio
+   del backend con la misma sesión MQTT y mensajes publicados mientras estaba caído.
+8. Probar status.details.rssi y los cuatro response con su command_id; verificar
+   que recibido no se muestre como ejecutado y que rechazado muestre details.motivo.
+9. Confirmar UUID del bridge y su LWT offline. Si se cambia el intervalo del nodo,
+   coordinar también el uplink interval del device profile: el bridge infiere offline
+   con 3 veces ese intervalo, no leyendo automáticamente nuestra configuración NVS.
 
 Para una instalación permanente conviene configurar varios minutos y uplinks no
 confirmados; los 20 s confirmados son valores de prueba del aula.

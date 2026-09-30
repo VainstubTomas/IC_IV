@@ -5,6 +5,10 @@ import { bdInit } from './config/db-connect-config.js';
 import { Server } from 'socket.io';
 import mqttConfig from './config/mqtt/mqtt-config.js';
 import sensorDataService from './services/sensor-data-service.js';
+import deviceEventService from './services/device-event-service.js';
+import SensorData from './models/sensor-data-model.js';
+import DeviceStatus from './models/device-status-model.js';
+import DeviceCommand from './models/device-command-model.js';
 
 async function mainServer() {
 
@@ -18,15 +22,16 @@ async function mainServer() {
 
     });
 
-    mqttConfig.init(io, (topic, payload) => sensorDataService.parseAndSaveMqttMessage(topic, payload));
-
-    bdInit()
-        .then(() => console.log('[server] Conexión exitosa con la base de datos 🤝'))
-        .catch((error) => console.log('[server] Error durante la conexión a la base de datos: ', error));
+    // DB e indices de deduplicacion listos antes de recibir mensajes MQTT.
+    await bdInit();
+    await Promise.all([SensorData.init(), DeviceStatus.init(), DeviceCommand.init()]);
+    mqttConfig.init(io, (topic, payload) => topic.endsWith('/data')
+      ? sensorDataService.parseAndSaveMqttMessage(topic, payload)
+      : deviceEventService.processMessage(topic, payload));
 
     server.listen(config.SERVERPORT, () => {
         console.log("[server] Servidor levantado 🚀");
     })
 }
 
-mainServer();
+mainServer().catch(err => { console.error('[server] No se pudo iniciar:', err.message); process.exit(1); });

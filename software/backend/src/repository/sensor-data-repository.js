@@ -10,7 +10,15 @@ class SensorDataRepository {
    */
   async create(data) {
     const record = new SensorData(data);
-    return await record.save();
+    try {
+      return { record: await record.save(), inserted: true };
+    } catch (err) {
+      if (data.ingest_id && err.code === 11000) {
+        const existing = await SensorData.findOne({ ingest_id: data.ingest_id }).lean();
+        if (existing) return { record: existing, inserted: false };
+      }
+      throw err;
+    }
   }
 
   /**

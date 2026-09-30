@@ -4,7 +4,12 @@ import config from '../config/config.js';
 import mqttConfig from '../config/mqtt/mqtt-config.js';
 import { isDeviceId, validateConfig } from '../config/mqtt/aura-protocol.js';
 import DeviceCommand from '../models/device-command-model.js';
+import deviceEventService from '../services/device-event-service.js';
 const router = Router();
+router.get('/dispositivo/status', async (req, res) => {
+  try { res.json({ ...(await deviceEventService.getStatus()), mqttConnected: mqttConfig.isConnected() }); }
+  catch (err) { res.status(503).json({ message: err.message }); }
+});
 router.get('/dispositivo/config', async (req, res) => {
   try {
     const deviceId = config.AURA_DEVICE_ID;
@@ -24,10 +29,10 @@ router.post('/dispositivo/config', async (req, res) => {
   try {
     record = await DeviceCommand.create({ deviceId, command_id, params, state: 'publishing' });
     await mqttConfig.publishCommand(deviceId, { command: 'set_config', params, command_id });
-    record.state = 'pending'; await record.save();
+    await DeviceCommand.updateOne({ command_id, state: 'publishing' }, { $set: { state: 'pending' } });
     res.status(202).json({ command_id, state: 'pending', message: 'Publicado; espera el proximo uplink y confirmacion de aplicacion.' });
   } catch (err) {
-    if (record) { record.state = 'publish_failed'; record.error = err.message; await record.save().catch(() => {}); }
+    if (record) await DeviceCommand.updateOne({ command_id, state: 'publishing' }, { $set: { state: 'publish_failed', error: err.message } }).catch(() => {});
     res.status(503).json({ command_id, message: err.message });
   }
 });
