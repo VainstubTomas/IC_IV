@@ -19,4 +19,4 @@ docker compose down
 ```
 Esto NO levanta AURA ni ChirpStack y NO recibe automáticamente el tráfico del aula.
 En clase usar broker AURA según datos del docente, UUID real y profile propio.
-Ver docs/PROPUESTA_AURA.md antes de habilitar configuración experimental.
+Ver la sección de configuración remota del README.md antes de habilitar el modo experimental.

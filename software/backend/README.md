@@ -1,6 +1,6 @@
 # Backend IC_IV para integración AURA
 
-Consultar README.md de la raíz y docs/PROPUESTA_AURA.md.
+Consultar el README.md de la raíz: contiene la puesta en marcha y la propuesta de configuración AURA.
 
 - Configurar BDURL, SERVERPORT, MQTTBROKERURL (broker AURA) y AURA_DEVICE_ID.
 - npm ci; npm start; dashboard servido en /; Swagger en /api-docs.
