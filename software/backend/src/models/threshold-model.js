@@ -4,7 +4,7 @@ const thresholdSchema = new mongoose.Schema(
   {
     deviceId: {
       type: String,
-      default: "Heladera1",
+      required: true,
       trim: true,
       unique: true
     },

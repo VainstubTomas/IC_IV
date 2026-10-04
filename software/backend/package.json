@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "Backend IoT IC_IV - Telemetría de Heladera Industrial",
+  "description": "Backend IC_IV - Heladera y freezer con ESP-NOW y AURA",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -10,7 +10,8 @@
   },
   "keywords": [
     "iot",
-    "lora",
+    "esp-now",
+    "mesh",
     "esp32",
     "mqtt",
     "telemetry",

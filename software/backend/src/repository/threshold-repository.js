@@ -8,7 +8,7 @@ class ThresholdRepository {
    * Obtiene el umbral configurado para un dispositivo
    * @param {string} deviceId
    */
-  async getByDevice(deviceId = "Heladera1") {
+  async getByDevice(deviceId) {
     return await Threshold.findOne({ deviceId }).lean();
   }
 
@@ -16,7 +16,7 @@ class ThresholdRepository {
    * Crea o actualiza el umbral de un dispositivo
    * @param {Object} data - { deviceId, min, max }
    */
-  async upsert({ deviceId = "Heladera1", min, max }) {
+  async upsert({ deviceId, min, max }) {
     return await Threshold.findOneAndUpdate(
       { deviceId },
       { deviceId, min, max },

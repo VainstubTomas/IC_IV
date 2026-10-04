@@ -1,28 +1,19 @@
-# Backend IC_IV para integración AURA
+# Backend IC IV
 
-Consultar el README.md de la raíz: contiene la puesta en marcha y la propuesta de configuración AURA.
+API Express y cliente MQTT AURA para heladera y freezer. Ver la guía general
+en [README](../../README.md) y el alcance del banco en
+[MESH_INTEGRACION](../../MESH_INTEGRACION.md).
 
-- Configurar BDURL, SERVERPORT, MQTTBROKERURL (broker AURA) y AURA_DEVICE_ID.
-- npm ci; npm start; dashboard servido en /; Swagger en /api-docs.
-- GET /api/v1/telemetria/latest devuelve última lectura del UUID configurado o null.
-- GET /api/v1/telemetria/history devuelve histórico del mismo dispositivo.
-- MQTT: devices/+/data → values.temp_c. UUID obligatorio en tópico.
-- GET/POST /api/v1/umbrales: alertas por email en plataforma, sin downlink.
-- GET /api/v1/dispositivo/config: último comando y habilitación experimental.
-- POST /api/v1/dispositivo/config: propuesta set_config; 202 = pendiente.
-- POST /api/v1/leer: 409, comando aún no acordado.
+Desde esta carpeta: `npm ci`, crear `.env` desde `.env.example`, completar
+broker/DB/UUID y ejecutar `npm start`. Dashboard y API usan el puerto configurado;
+la plantilla usa 8080. `npm test` ejecuta las pruebas locales.
 
-AURA_CONFIG_EXPERIMENTAL=false por defecto. No consumir broker ChirpStack.
-Contrato v2.0 recibido: response acepta encolado/transmitido/recibido/rechazado y ninguno confirma ejecución. npm test ejecuta
-pruebas locales con transporte simulado; no verifica AURA ni hardware real.
+Cada sonda tiene un UUID lógico independiente. Los endpoints de telemetría
+aceptan `sensor=heladera` o `sensor=freezer`; sin selector se utiliza heladera.
+La hora medida se conserva separada de la recepción cuando se habilita la
+extensión acordada. Los mensajes duplicados se detectan por `ingest_id`.
 
-## Recepción según contrato v2.0
-
-MQTT_CLIENT_ID estable y exclusivo, clean=false, suscripciones QoS 1. Completar
-AURA_BRIDGE_DEVICE_ID para LWT. DB e índices listos antes de MQTT; no PUBACK antes
-de persistir. ingest_id opcional deduplica en MongoDB y evita alertas repetidas.
-Status guarda online/offline y details; RSSI sale de details.rssi. Response usa
-details.command_id para correlación, guarda historial y no confirma ejecución.
-GET /api/v1/dispositivo/status expone estado de nodo, bridge y conexión MQTT.
-Scripts de prueba local: ./scripts/prueba-contrato.ps1; ver README principal.
-No sustituye FastAPI de AURA; las pruebas de esa plataforma dependen de la cátedra.
+Los reportes mesh y la publicación de ajustes están deshabilitados por defecto
+hasta coordinar su protocolo con gateway/AURA. Un acuse de transporte solo no
+confirma aplicación. `/umbrales` configura email local; la interfaz mesh envía
+los umbrales al nodo mediante `/dispositivo/config` y usa su reporte explícito.

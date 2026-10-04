@@ -45,7 +45,7 @@ class SensorDataController {
    */
   async getLatestTelemetry(req, res) {
     try {
-      const latest = await sensorDataService.getLatestTelemetry();
+      const latest = await sensorDataService.getLatestTelemetry(req.query.sensor || 'heladera');
       return res.status(200).json(latest);
     } catch (error) {
       console.error("[controller] Error en getLatestTelemetry:", error);
@@ -63,7 +63,7 @@ class SensorDataController {
   async getHistory(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 50;
-      const history = await sensorDataService.getTelemetryHistory(limit);
+      const history = await sensorDataService.getTelemetryHistory(limit,req.query.sensor || 'heladera');
       return res.status(200).json({
         status: "success",
         count: history.length,
@@ -83,7 +83,7 @@ class SensorDataController {
    * Forzar lectura inmediata enviando comando MQTT hacia el nodo
    */
   async forceRead(req, res) {
-    return res.status(409).json({ message: 'Lectura forzada pendiente de definir con AURA. El nodo clase A recibe downlinks despues de un uplink.' });
+    return res.status(409).json({ message: 'La lectura se realiza segun el intervalo propio de cada sonda. Comando de lectura forzada no definido.' });
   }
 
   /**

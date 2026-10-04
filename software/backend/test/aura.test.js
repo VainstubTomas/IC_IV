@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import { parseAuraData, validateConfig, parseObject, parseAuraEvent, previousResponseStates } from '../src/config/mqtt/aura-protocol.js';
 import { commandTopic } from '../src/config/mqtt/mqtt-topics.js';
+import { validateSensor, sensorDeviceId } from '../src/config/mesh-protocol.js';
 const codec = vm.createContext({});
 vm.runInContext(fs.readFileSync(new URL('../../../configuration/codec-heladera.js', import.meta.url), 'utf8'), codec);
 const normalize = value => JSON.parse(JSON.stringify(value));
@@ -158,12 +159,12 @@ test('status del bridge se conserva y response correlaciona UUID+command_id sin 
   await ctx.service.processMessage(`devices/${device}/response`,'{"status":"enviado_a_mesh","details":{"command_id":"c-1"}}');assert.equal(history.length,2);
 });
 test('bridge offline tiene prioridad sobre ultimo online del nodo en el dashboard',()=>{
-  const html=fs.readFileSync(new URL('../../frontend/index.html',import.meta.url),'utf8');
-  const ctx=vm.createContext({document:{addEventListener(){}}});vm.runInContext(html.split('<script>')[1].split('</script>')[0],ctx);
+  const source=fs.readFileSync(new URL('../../frontend/dashboard.js',import.meta.url),'utf8');
+  const ctx=vm.createContext({});vm.runInContext('function describirEstadoAura'+source.split('function describirEstadoAura')[1].split('function renderState')[0],ctx);
   const state={mqttConnected:true,bridgeConfigured:true,device:{status:'online'},bridge:{status:'offline'}};
   assert.equal(ctx.describirEstadoAura(state).online,false);
-  assert.match(ctx.describirEstadoAura(state).text,/Bridge offline/);
-  state.bridge.status='online';assert.equal(ctx.describirEstadoAura(state).online,true);
+  assert.match(ctx.describirEstadoAura(state).text,/Gateway offline/);
+  state.bridge.status='online';state.bridge.details={iciv:{central:'online'}};assert.equal(ctx.describirEstadoAura(state).online,true);
   state.mqttConnected=false;assert.equal(ctx.describirEstadoAura(state).online,false);
 });
 
@@ -182,7 +183,7 @@ test('respuesta recibida durante publish no se sobrescribe con pending',async()=
   const handlers={};let state='publishing';
   const commandModel={create:async()=>({}),updateOne:async(filter,update)=>{if(state===filter.state)state=update.$set.state;}};
   const ctx=vm.createContext({Router:()=>({get:(path,fn)=>{},post:(path,fn)=>handlers[path]=fn}),randomUUID:()=> 'c-1',
-    config:{AURA_DEVICE_ID:device,AURA_CONFIG_EXPERIMENTAL:true},isDeviceId:()=>true,validateConfig,DeviceCommand:commandModel,
+    config:{AURA_DEVICE_ID:device,AURA_CONFIG_EXPERIMENTAL:true},isDeviceId:()=>true,validateConfig,validateSensor,sensorDeviceId,DeviceCommand:commandModel,
     deviceEventService:{},mqttConfig:{publishCommand:async()=>{state='recibido';}}});
   vm.runInContext(source,ctx);
   let statusCode;

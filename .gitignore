@@ -21,6 +21,11 @@ mongo-data/
 credenciales.h
 */credenciales.h
 
+# Red, MAC e identificadores locales de los roles mesh
+config_local.h
+build/
+firmware/tests_host/*.exe
+
 # Archivos de sistema operativo e IDEs
 .DS_Store
 Thumbs.db

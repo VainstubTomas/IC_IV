@@ -1,0 +1,4 @@
+#pragma once
+#define ICIV_SENSOR_MAC {0,0,0,0,0,0}
+#define ICIV_GATEWAY_MAC {0,0,0,0,0,0}
+#define ICIV_CHANNEL 1

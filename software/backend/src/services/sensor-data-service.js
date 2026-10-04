@@ -2,6 +2,7 @@ import config from "../config/config.js";
 import { parseAuraData, isDeviceId } from "../config/mqtt/aura-protocol.js";
 import sensorDataRepository from "../repository/sensor-data-repository.js";
 import alertService from "./alert-service.js";
+import { parseMeshMetadata } from '../config/mesh-protocol.js';
 
 /**
  * Formatea una fecha a string legible YYYY-MM-DD HH:mm:ss
@@ -17,7 +18,7 @@ class SensorDataService {
   /**
    * Guarda una nueva lectura de telemetría validada
    */
-  async saveTelemetry({ temperature, temperatura, rssi, deviceId = config.AURA_DEVICE_ID, source = "http", ingest_id }) {
+  async saveTelemetry({ temperature, temperatura, rssi, deviceId = config.AURA_DEVICE_ID, source = "http", ingest_id, measuredAt, powerCutAt, powerFirst, onBattery }) {
     if (!isDeviceId(deviceId)) throw new Error("Se requiere UUID AURA del dispositivo");
     // Aceptar tanto 'temperature' como 'temperatura'
     const tempVal = temperature !== undefined ? Number(temperature) : Number(temperatura);
@@ -33,6 +34,10 @@ class SensorDataService {
       rssi: rssiVal,
       deviceId,
       source,
+      ...(measuredAt ? { measuredAt } : {}),
+      ...(powerCutAt ? { powerCutAt } : {}),
+      ...(powerFirst !== undefined ? { powerFirst } : {}),
+      ...(onBattery !== undefined ? { onBattery } : {}),
       ...(ingest_id !== undefined ? { ingest_id } : {})
     });
 
@@ -51,15 +56,18 @@ class SensorDataService {
       deviceId: record.deviceId,
       timestamp: formatTimestamp(record.createdAt),
       createdAt: record.createdAt
+      ,measuredAt: record.measuredAt, powerCutAt: record.powerCutAt, powerFirst: record.powerFirst, onBattery: record.onBattery
     };
   }
 
   /**
    * Obtiene la última lectura registrada
    */
-  async getLatestTelemetry() {
-    if (!isDeviceId(config.AURA_DEVICE_ID)) return null;
-    const latest = await sensorDataRepository.getLatest(config.AURA_DEVICE_ID);
+  async getLatestTelemetry(sensor = 'heladera') {
+    if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : config.AURA_FREEZER_DEVICE_ID;
+    if (!isDeviceId(deviceId)) return null;
+    const latest = await sensorDataRepository.getLatest(deviceId);
 
     if (!latest) {
       return null;
@@ -74,15 +82,18 @@ class SensorDataService {
       deviceId: latest.deviceId,
       timestamp: formatTimestamp(latest.createdAt),
       createdAt: latest.createdAt
+      ,measuredAt: latest.measuredAt, powerCutAt: latest.powerCutAt, powerFirst: latest.powerFirst, onBattery: latest.onBattery
     };
   }
 
   /**
    * Obtiene el listado histórico de lecturas
    */
-  async getTelemetryHistory(limit = 50) {
-    if (!isDeviceId(config.AURA_DEVICE_ID)) return [];
-    const records = await sensorDataRepository.getHistory(limit, config.AURA_DEVICE_ID);
+  async getTelemetryHistory(limit = 50, sensor = 'heladera') {
+    if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : config.AURA_FREEZER_DEVICE_ID;
+    if (!isDeviceId(deviceId)) return [];
+    const records = await sensorDataRepository.getHistory(limit, deviceId);
     return records.map((r) => ({
       id: r._id,
       ingest_id: r.ingest_id,
@@ -92,6 +103,7 @@ class SensorDataService {
       deviceId: r.deviceId,
       timestamp: formatTimestamp(r.createdAt),
       createdAt: r.createdAt
+      ,measuredAt: r.measuredAt, powerCutAt: r.powerCutAt, powerFirst: r.powerFirst, onBattery: r.onBattery
     }));
   }
 
@@ -102,7 +114,11 @@ class SensorDataService {
     let reading;
     try { reading = parseAuraData(topic, payloadStr); }
     catch (err) { console.warn('[sensor-service] Payload AURA rechazado:', err.message); return null; }
-    if (reading && config.AURA_DEVICE_ID && reading.deviceId !== config.AURA_DEVICE_ID) return null;
+    if (reading && (config.AURA_DEVICE_ID || config.AURA_FREEZER_DEVICE_ID) && ![config.AURA_DEVICE_ID,config.AURA_FREEZER_DEVICE_ID].includes(reading.deviceId)) return null;
+    if (reading && config.AURA_MESH_EXTENSIONS_ENABLED) {
+      try { Object.assign(reading, parseMeshMetadata(topic,payloadStr)); }
+      catch (_) { return null; }
+    }
     // Errores de DB se propagan: no confirmar MQTT antes de persistir.
     return reading ? await this.saveTelemetry(reading) : null;
   }

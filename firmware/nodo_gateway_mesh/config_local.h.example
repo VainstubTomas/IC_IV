@@ -1,0 +1,22 @@
+#pragma once
+#define ICIV_WIFI_SSID "CAMBIAR"
+#define ICIV_WIFI_PASS "CAMBIAR"
+#define ICIV_MQTT_HOST "CAMBIAR"
+#define ICIV_MQTT_PORT 1883
+#define ICIV_MQTT_USER ""
+#define ICIV_MQTT_PASS ""
+#define ICIV_API_BASE "http://CAMBIAR:8000"
+#define ICIV_API_TOKEN ""
+#define ICIV_TENANT_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_GATEWAY_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_FRIDGE_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_FREEZER_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_SENSOR_MAC {0,0,0,0,0,0}
+#define ICIV_ROOM_MAC {0,0,0,0,0,0} // cero para enlace directo al sensor
+// Activar solo tras confirmar ruta/esquema y semantica del 200/201 con AURA.
+#define ICIV_AURA_INGEST_ENABLED 0
+// Si AURA devuelve accepted_ingest_ids, se verifica el ID sin este flag.
+// Si solo devuelve 200/201, exigir acuerdo de que significa persistencia total.
+#define ICIV_HTTP_SUCCESS_IS_DURABLE 0
+// Extension propuesta: timestamp/diagnostico en payload REST y status.details.iciv.
+#define ICIV_AURA_EXTENSIONS_ENABLED 0

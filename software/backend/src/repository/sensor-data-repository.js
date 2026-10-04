@@ -9,7 +9,7 @@ class SensorDataRepository {
    * @param {Object} data - { temperature, rssi, deviceId, source }
    */
   async create(data) {
-    const record = new SensorData(data);
+    const record = new SensorData({ ...data, orderAt:data.measuredAt || new Date() });
     try {
       return { record: await record.save(), inserted: true };
     } catch (err) {
@@ -26,7 +26,7 @@ class SensorDataRepository {
    */
   async getLatest(deviceId) {
     return await SensorData.findOne({ deviceId })
-      .sort({ createdAt: -1 })
+      .sort({ orderAt: -1, createdAt: -1 })
       .lean();
   }
 
@@ -37,7 +37,7 @@ class SensorDataRepository {
   async getHistory(limit = 50, deviceId) {
     const parsedLimit = Math.min(Math.max(1, parseInt(limit) || 50), 500);
     return await SensorData.find({ deviceId })
-      .sort({ createdAt: -1 })
+      .sort({ orderAt: -1, createdAt: -1 })
       .limit(parsedLimit)
       .lean();
   }
