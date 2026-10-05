@@ -13,7 +13,8 @@
 #define ICIV_SENSOR_MAC {0,0,0,0,0,0}
 #define ICIV_ROOM_MAC {0,0,0,0,0,0} // cero: enlace directo
 #define ICIV_AURA_INGEST_ENABLED 0 // habilitar tras completar API/tenant/UUID
-// Espejo auxiliar del dashboard IC IV: broker distinto de AURA.
+// Espejo auxiliar del dashboard IC IV: broker distinto de AURA, solo salida.
+// El gateway no acepta comandos desde este broker: la configuracion se cambia en AURA.
 #define ICIV_LOCAL_MQTT_ENABLED 0
 #define ICIV_LOCAL_MQTT_HOST "CAMBIAR"
 #define ICIV_LOCAL_MQTT_PORT 1883

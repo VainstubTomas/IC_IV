@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-process.env.ICIV_TRANSPORT='mesh';process.env.AURA_CONFIG_EXPERIMENTAL='true';process.env.AURA_DEVICE_ID='650e8400-e29b-41d4-a716-446655440001';
+process.env.ICIV_TRANSPORT='mesh';process.env.AURA_CONFIG_EXPERIMENTAL='true'; // aun habilitado, mesh no publica comandos
+process.env.AURA_DEVICE_ID='650e8400-e29b-41d4-a716-446655440001';
 const device=process.env.AURA_DEVICE_ID;
 const {app}=await import('../../software/backend/src/app.js');
 const {default:Command}=await import('../../software/backend/src/models/device-command-model.js');
@@ -21,19 +22,21 @@ Readings.findOne=f=>query({deviceId:f.deviceId,sensor:f.sensor,temperature:f.sen
 Alerts.find=()=>query([{measuredAt:new Date('2026-10-04T12:00:00Z'),createdAt:new Date('2026-10-04T14:00:00Z'),details:{alimentacion:'bateria'}}]);
 Status.findOne=()=>query({deviceId:device,status:'online',details:{config}});
 Status.findOneAndUpdate=(f,u)=>{if(u.$set.details.config)config=u.$set.details.config;return query({...f,...u.$set});};
-test('API: mismo UUID, parches, recibido no aplica; aplicado confirma configuración de ambas sondas',async()=>{
+test('API mesh: configuración solo lectura; el status espejado de AURA actualiza umbrales',async()=>{
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const url='http://127.0.0.1:'+server.address().port+'/api/v1';
  const post=p=>fetch(url+'/dispositivo/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
  try{
-  const patch={intervalo_heladera_s:10,min_heladera_c:1};const r=await post(patch);assert.equal(r.status,202);const command=await r.json();assert.equal(published.at(-1).id,device);assert.deepEqual(published.at(-1).payload.params,patch);
-  await events.processMessage(`devices/${device}/response`,JSON.stringify({status:'recibido',details:{command_id:command.command_id,config:{...config,...patch}}}));assert.equal(thresholdMap.size,0);
-  await events.processMessage(`devices/${device}/response`,JSON.stringify({status:'aplicado',details:{command_id:command.command_id,config:{...config,...patch}}}));assert.equal(thresholdMap.get(device+':heladera').min,1);assert.equal(thresholdMap.get(device+':freezer').min,-25);
-  const current=await(await fetch(url+'/dispositivo/config')).json();assert.equal(current.latest.confirma_ejecucion,true);
-  await events.processMessage(`devices/${device}/response`,JSON.stringify({status:'recibido',details:{command_id:command.command_id}}));assert.equal(records.at(-1).state,'aplicado');
-  const f=await post({intervalo_freezer_s:600});assert.equal(f.status,202);assert.deepEqual(published.at(-1).payload.params,{intervalo_freezer_s:600});assert.equal(published.at(-1).id,device);
-  const recovery=await post({recuperacion_s:900});assert.equal(recovery.status,202);assert.deepEqual(published.at(-1).payload.params,{recuperacion_s:900});
+  for(const patch of [{intervalo_heladera_s:10},{recuperacion_s:900},{}]){const r=await post(patch);assert.equal(r.status,409);assert.match((await r.json()).message,/AURA/);}
+  assert.equal(published.length,0);assert.equal(records.length,0);
+  const before=await(await fetch(url+'/dispositivo/config')).json();assert.equal(before.readOnly,true);assert.equal(before.reported.params.min_heladera_c,2);
+  // Comando emitido por AURA: su response espejado no tiene registro local y no toca nada.
+  await events.processMessage(`devices/${device}/response`,JSON.stringify({status:'aplicado',details:{command_id:'aura-c-1',config:{...config,min_heladera_c:1}}}));
+  assert.equal(thresholdMap.size,0);assert.equal(records.length,0);
+  // El reporte posterior del nodo, espejado por el gateway, sí es la configuración vigente.
+  await events.processMessage(`devices/${device}/status`,JSON.stringify({status:'online',details:{evento:'reporte',transporte:'mesh',config:{...config,min_heladera_c:1}}}));
+  assert.equal(thresholdMap.get(device+':heladera').min,1);assert.equal(thresholdMap.get(device+':freezer').min,-25);
+  const after=await(await fetch(url+'/dispositivo/config')).json();assert.equal(after.reported.params.min_heladera_c,1);
   for(const sensor of ['heladera','freezer']){const reading=await(await fetch(url+'/telemetria/latest?sensor='+sensor)).json();assert.equal(reading.deviceId,device);assert.equal(reading.temperatura,sensor==='heladera'?4:-18);assert.notEqual(reading.measuredAt,reading.createdAt);}
-  for(const bad of [{intervalo_heladera_s:1},{min_heladera_c:7},{sensor:'freezer',interval_s:60},{}])assert.equal((await post(bad)).status,400);
-  assert.equal(published.length,3);const energy=await(await fetch(url+'/dispositivo/energia')).json();assert.equal(energy.events[0].powerCutAt,'2026-10-04T12:00:00.000Z');
+  const energy=await(await fetch(url+'/dispositivo/energia')).json();assert.equal(energy.events[0].powerCutAt,'2026-10-04T12:00:00.000Z');
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
 });

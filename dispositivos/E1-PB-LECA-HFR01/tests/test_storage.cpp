@@ -1,4 +1,3 @@
-// GENERADO desde IC IV; editar origen y regenerar.
 #include "fakes/Preferences.h"
 #include "../mesh_storage.h"
 #include <cassert>

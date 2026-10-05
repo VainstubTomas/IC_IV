@@ -1,7 +1,7 @@
 // Rele fijo del ejemplo AURA: NO fabrica ACK del gateway ni del central.
 // El sensor conserva su copia hasta el ACK central, por lo que la sala no
 // necesita asumir propiedad de las muestras ni borrarlas al confirmar un salto.
-#include "../../../firmware/mesh_comun/mesh_radio.h"
+#include "../../../dispositivos/E1-PB-LECA-HFR01/mesh_radio.h"
 #if __has_include("config_local.h")
 #include "config_local.h"
 #endif

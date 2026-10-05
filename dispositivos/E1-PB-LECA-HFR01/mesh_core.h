@@ -1,4 +1,3 @@
-// GENERADO desde IC IV; editar origen y regenerar.
 #ifndef ICIV_MESH_CORE_H
 #define ICIV_MESH_CORE_H
 #include <stdint.h>

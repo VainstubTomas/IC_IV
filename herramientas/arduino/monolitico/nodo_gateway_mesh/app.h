@@ -1,7 +1,10 @@
 // GENERADO: editar el rol original y regenerar.
 /* Adaptador de banco IC IV / contrato AURA v3.
  * Telemetria AURA solo REST. MQTT AURA: estado, comandos, respuestas, alertas.
- * El espejo opcional del dashboard usa OTRO broker. HTTP corre en una tarea.
+ * El espejo opcional del dashboard usa OTRO broker y es de solo salida: el gateway
+ * no se suscribe ahi a comandos. La configuracion se cambia solo desde AURA (§2.5),
+ * asi AURA registra cada cambio y todo command_id del response lo emitio AURA.
+ * HTTP corre en una tarea.
  */
 #include <HTTPClient.h>
 #include <ArduinoMqttClient.h>
@@ -426,9 +429,9 @@ bool decodePatch(JsonObject p,ConfigCommand& cmd) {
   MeshConfig merged;if(nodeSeen&&!applyPatch(nodeInfo.config,cmd,merged))return false;
   return cmd.mask!=0;
 }
-void command(MqttClient& client,int size) {
-  String topic=client.messageTopic(),body;
-  while(client.available()){char c=client.read();if(body.length()<2048)body+=c;}
+void onAura(int size) {
+  String topic=aura.messageTopic(),body;
+  while(aura.available()){char c=aura.read();if(body.length()<2048)body+=c;}
   if(topic!=String("devices/")+ICIV_DEVICE_ID+"/command")return;
   if(size>2048){response(nullptr,"rechazado","JSON supera limite del adaptador");return;}
   JsonDocument d;if(deserializeJson(d,body)){response(nullptr,"rechazado","JSON invalido");return;}
@@ -441,7 +444,6 @@ void command(MqttClient& client,int size) {
   if(!d["params"].is<JsonObject>()||!decodePatch(d["params"].as<JsonObject>(),cmd)){response(id,"rechazado","Parche invalido o fuera de rango");return;}
   if(radioSend(route(),frame(COMANDO,ownMac,sensorMac,0,&cmd,sizeof(cmd))))response(id,"transmitido");else response(id,"rechazado","No se pudo transmitir");
 }
-void onAura(int size){command(aura,size);}void onLocal(int size){command(local,size);}
 HttpResult post(const HttpJob& job) {
   HttpResult out={job,false,0};const Muestra& m=job.sample;
   if(m.kind!=MEDICION||!ICIV_AURA_INGEST_ENABLED||!validUuid(ICIV_DEVICE_ID)||!validUuid(ICIV_TENANT_ID)||WiFi.status()!=WL_CONNECTED)return out;
@@ -517,7 +519,7 @@ void serviceWifi(uint32_t now) {
 void serviceMqtt(uint32_t now) {
   if(WiFi.status()!=WL_CONNECTED)return;aura.poll();local.poll();
   if(!aura.connected()&&int32_t(now-auraAt)>=0){if(aura.connect(ICIV_MQTT_HOST,ICIV_MQTT_PORT)){aura.subscribe(String("devices/")+ICIV_DEVICE_ID+"/command",1);auraTries=0;nodeStatus(nodeOffline);}auraAt=now+(++auraTries>=4?300000UL:5000UL);if(auraTries>=4)auraTries=0;}
-  if(ICIV_LOCAL_MQTT_ENABLED&&!local.connected()&&int32_t(now-localAt)>=0){localAllowed=brokersDifferent();if(localAllowed&&local.connect(ICIV_LOCAL_MQTT_HOST,ICIV_LOCAL_MQTT_PORT)){local.subscribe(String("devices/")+ICIV_DEVICE_ID+"/command",1);nodeStatus(nodeOffline);}else if(!localAllowed)Serial.println("[ESPEJO] Bloqueado: broker local sin resolver o igual a AURA");localAt=now+5000;}
+  if(ICIV_LOCAL_MQTT_ENABLED&&!local.connected()&&int32_t(now-localAt)>=0){localAllowed=brokersDifferent();if(localAllowed&&local.connect(ICIV_LOCAL_MQTT_HOST,ICIV_LOCAL_MQTT_PORT))nodeStatus(nodeOffline); // espejo: sin suscripcioneselse if(!localAllowed)Serial.println("[ESPEJO] Bloqueado: broker local sin resolver o igual a AURA");localAt=now+5000;}
 }
 void diagnostics(uint32_t now) {
   if(nodeSeen&&!nodeOffline&&uint32_t(now-lastSeen)>3UL*min(nodeInfo.config.sensors[0].intervalS,nodeInfo.config.sensors[1].intervalS)*1000UL){nodeOffline=true;nodeStatus(true);}
@@ -535,9 +537,9 @@ void setup() {
   char topic[96];snprintf(topic,sizeof(topic),"devices/%s/status",ICIV_GATEWAY_ID);
   aura.beginWill(topic,20,true,1);aura.print("{\"status\":\"offline\"}");aura.endWill();
   local.beginWill(topic,20,true,1);local.print("{\"status\":\"offline\"}");local.endWill();
-  aura.onMessage(onAura);local.onMessage(onLocal);
+  aura.onMessage(onAura); // el broker local no tiene callback: no se le aceptan comandos
   httpJobs=xQueueCreate(4,sizeof(HttpJob));httpResults=xQueueCreate(4,sizeof(HttpResult));
   if(!httpJobs||!httpResults||xTaskCreate(httpWorker,"aura_http",10240,nullptr,1,nullptr)!=pdPASS){ready=false;Serial.println("ERROR tarea HTTP: no enviar ACK central");}
-  Serial.println("Gateway v3: un UUID por placa; mediciones solo REST; espejo solo broker separado");
+  Serial.println("Gateway v3: un UUID por placa; mediciones solo REST; comandos solo desde AURA; espejo de solo salida");
 }
 void loop(){uint32_t now=millis();if(ready)processRadio();serviceWifi(now);serviceMqtt(now);diagnostics(now);delay(5);}

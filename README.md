@@ -4,15 +4,16 @@ Sistema de adquisición, transporte, almacenamiento y visualización de temperat
 para heladera y freezer. Utiliza dos sondas DS18B20, un nodo XIAO ESP32-S3,
 una malla ESP-NOW basada en el ejemplo de AURA, MongoDB y un dashboard web.
 
-El nodo mide y controla alarmas localmente, permite configurar cada sonda
-desde la interfaz y conserva mediciones pendientes cuando falla la comunicación.
+El nodo mide y controla alarmas localmente, se configura desde AURA (el
+dashboard local muestra la configuración vigente, en solo lectura) y conserva mediciones pendientes cuando falla la comunicación.
 También registra la primera lectura del paso a batería mediante una entrada
 de alimentación configurable.
 
 La integración sigue el **contrato AURA v3.0** recibido: una placa, un UUID,
 dos mediciones independientes y telemetría central solo por REST. Las alertas,
 estados y comandos usan MQTT. El backend del proyecto y su dashboard usan
-un **broker local separado**, con espejo opcional del gateway.
+un **broker local separado**, con espejo opcional del gateway. El espejo es de
+solo salida: el gateway no acepta comandos desde el broker local.
 La adaptación de infraestructura y lo pendiente de validar en clase están en
 [MESH_INTEGRACION.md](MESH_INTEGRACION.md).
 
@@ -68,18 +69,15 @@ un ACK distinto de publicación, que no promete persistencia central.
 
 ```text
 IC_IV/
- ├── firmware/                       # Firmware actual de nuestro nodo
- │   ├── nodo_mesh/                  # .ino, app.h y plantilla config_local.h.example
- │   └── mesh_comun/                 # Protocolo, radio, FIFO y persistencia compartidos
- ├── dispositivos/E1-PB-LECA-HFR01/   # Entrega autocontenida para el repo AURA (generada)
+ ├── dispositivos/E1-PB-LECA-HFR01/   # FUENTE del nodo: sketch, protocolo, ficha y tests
  ├── software/
  │   ├── backend/                    # API, MongoDB, MQTT y alertas
  │   └── frontend/                   # Dashboard de heladera y freezer
  ├── tests/                          # Todas las pruebas del proyecto
  │   ├── backend/                    # Pruebas Node.js; se ejecutan con npm test
  │   ├── firmware/
- │   │   ├── host/                   # Comprobaciones C++ de FIFO/ACK/CRC
- │   │   └── esp32/tests_mesh/        # Las mismas comprobaciones al compilar en Arduino
+ │   │   ├── host/                   # Corre los tests del nodo y el del gateway de banco
+ │   │   └── esp32/tests_mesh/        # Las comprobaciones del nodo al compilar en Arduino
  │   └── manual/                     # Scripts de banco MQTT local
  ├── legacy/                         # Versiones anteriores, fuera del flujo mesh actual
  │   ├── firmware/main/              # Prototipo LoRa punto a punto
@@ -90,10 +88,9 @@ IC_IV/
  │   ├── nodo_sala_mesh/             # Adaptador real del relay ESP-NOW
  │   └── nodo_gateway_mesh/          # Adaptador real hacia AURA
  ├── herramientas/nvs/               # Respaldo/validación NVS anterior antes de migrar
- ├── herramientas/aura/              # Genera el paquete de dispositivo
  ├── herramientas/arduino/
- │   ├── generar_mesh_monolitico.py  # Regenera copias; no copia credenciales
- │   └── monolitico/                 # Copias autocontenidas opcionales para Arduino IDE
+ │   ├── generar_mesh_monolitico.py  # Regenera copias de sala/gateway; no copia credenciales
+ │   └── monolitico/                 # Copias autocontenidas de sala/gateway para Arduino IDE
  ├── mosquitto/config/               # Broker del banco local
  ├── docker-compose.yml             # MQTT y MongoDB para pruebas locales
  ├── CONTRATO_MQTT.md                # Contrato recibido, sin modificaciones
@@ -103,8 +100,11 @@ IC_IV/
 ```
 
 
-El `.ino` del sensor es la entrada de Arduino; `app.h` contiene su funcionamiento
-y `mesh_comun` contiene archivos que ese programa necesita. Los archivos locales
+`dispositivos/E1-PB-LECA-HFR01/` es **el código del nodo**, no una copia: se edita
+ahí y es la misma carpeta que va al repo `aura-firmware`. El `.ino` es la entrada
+de Arduino, `app.h` su funcionamiento y `mesh_core.h`/`mesh_radio.h`/`mesh_storage.h`
+el protocolo, la radio y la cola persistente. Sala y gateway de banco incluyen esos
+mismos headers, así los tres roles usan siempre la misma trama. Los archivos locales
 `.env`, `config_local.h` y `credenciales.h` no se versionan.
 
 La carpeta `simulaciones/mesh` reúne la propuesta de infraestructura para el banco:
@@ -167,7 +167,7 @@ Completar `.env` con la configuración del entorno:
 | `AURA_GATEWAY_DEVICE_ID` | UUID del gateway para su estado y LWT |
 | `ICIV_TRANSPORT` | `mesh` por defecto; `lorawan` conserva validación de comandos anteriores |
 | `MQTT_CLIENT_ID` | ID estable y exclusivo de esta instancia |
-| `AURA_CONFIG_EXPERIMENTAL` | Publicación de ajustes acordados; por defecto `false` |
+| `AURA_CONFIG_EXPERIMENTAL` | Solo `lorawan` (legado): publicación de ajustes. En `mesh` no se publican comandos |
 | `BROKERUSERNAME`, `BROKERPASSW`, `MQTTBROKERCAPATH` | Autenticación/CA MQTT cuando corresponda |
 | `SMTPHOST`, `SMTPPORT`, `SMTPSECURE`, `SMTPUSER`, `SMTPPASS`, `SMTPFROM` | Alertas por correo |
 
@@ -235,8 +235,8 @@ el servidor AURA, SMTP ni sensores físicos.
 | `GET /api/v1/alertas/emails`, `POST /api/v1/alertas/emails` | Destinatarios de alertas |
 | `DELETE /api/v1/alertas/emails/:id` | Eliminar destinatario |
 | `GET /api/v1/dispositivo/status` | Estados de sondas, gateway y conexión MQTT |
-| `GET /api/v1/dispositivo/config` | Configuración completa reportada y último comando de la placa |
-| `POST /api/v1/dispositivo/config` | Publicar ajustes; `202` no significa ejecución |
+| `GET /api/v1/dispositivo/config` | Configuración vigente reportada por la placa (solo lectura en mesh) |
+| `POST /api/v1/dispositivo/config` | En `mesh`: `409`, la configuración se cambia desde AURA. Solo `lorawan` (legado) publica |
 | `GET /api/v1/dispositivo/energia` | Alertas de cortes con hora original cuando existe |
 | `POST /api/v1/leer` | `409`: lectura forzada no definida |
 
@@ -253,13 +253,12 @@ desde el hardware. No enviar estos ejemplos al broker compartido de AURA.
 
 Las pruebas C++ de FIFO/CRC/ACK se evalúan al compilar `tests/firmware/esp32/tests_mesh`.
 Con un compilador de host compatible también se pueden ejecutar, junto con
-las pruebas de NVS con fallos simulados:
+las pruebas de NVS con fallos simulados. Viven con el nodo:
 
 ```powershell
-g++ -std=c++17 tests/firmware/host/test_mesh.cpp -o tests/firmware/host/test_mesh.exe
-./tests/firmware/host/test_mesh.exe
-g++ -std=c++17 -Itests/firmware/host/fakes tests/firmware/host/test_storage.cpp -o tests/firmware/host/test_storage.exe
-./tests/firmware/host/test_storage.exe
+$t = "dispositivos/E1-PB-LECA-HFR01/tests"
+g++ -std=c++17 "$t/test_mesh.cpp" -o "$t/test_mesh.exe"; & "$t/test_mesh.exe"
+g++ -std=c++17 "-I$t/fakes" "$t/test_storage.cpp" -o "$t/test_storage.exe"; & "$t/test_storage.exe"
 ```
 
 ---
@@ -291,8 +290,9 @@ Configurar únicamente una señal lógica compatible para detectar alimentación
 Copiar la plantilla junto al sketch que se va a cargar:
 
 ```powershell
-if (!(Test-Path firmware/nodo_mesh/config_local.h)) {
-    Copy-Item firmware/nodo_mesh/config_local.h.example firmware/nodo_mesh/config_local.h
+$nodo = "dispositivos/E1-PB-LECA-HFR01"
+if (!(Test-Path "$nodo/config_local.h")) {
+    Copy-Item "$nodo/config_local.h.example" "$nodo/config_local.h"
 }
 ```
 
@@ -302,7 +302,7 @@ tenant, UUID único de la placa y UUID del gateway. El espejo local tiene
 host/puerto/credenciales propios y empieza apagado. `config_local.h` está excluido de Git;
 no versionar claves, tokens ni direcciones privadas del entorno.
 
-Cargar **firmware/nodo_mesh/nodo_mesh.ino** para el sensor. Los sketches de
+Cargar **dispositivos/E1-PB-LECA-HFR01/E1-PB-LECA-HFR01.ino** para el sensor. Los sketches de
 `simulaciones/mesh/nodo_sala_mesh` y `simulaciones/mesh/nodo_gateway_mesh` requieren coordinar su carga con el responsable de infraestructura.
 Los tres deben utilizar la misma versión de aplicación y el mismo canal.
 Abrir monitor serie a **115200 baudios** y revisar NVS, MAC, muestras y ambos ACK.
@@ -310,7 +310,8 @@ El sensor incluye `partitions.csv` con NVS de 128 KiB para flash de 8 MiB.
 Si ya tenía el mesh anterior, respaldar y revisar su NVS **antes** de cambiar
 la tabla; seguir la migración de la guía. No se borra ni convierte la cola anterior automáticamente.
 
-Si el IDE presenta problemas con includes entre carpetas, usar las copias de
+La carpeta del sensor ya es autocontenida. Si el IDE presenta problemas con los
+includes entre carpetas de sala o gateway, usar las copias de
 `herramientas/arduino/monolitico/`, con `config_local.h` al lado del sketch elegido.
 Se regeneran desde los originales y nunca se editan a mano:
 
@@ -323,7 +324,7 @@ python herramientas/arduino/generar_mesh_monolitico.py
 Valores iniciales: heladera cada **60 s**, freezer cada **300 s**, recuperación
 offline cada **300 s**. Cada intervalo de muestreo admite 5–86400 segundos.
 Los límites iniciales son 2/6 °C y −25/−15 °C respectivamente, ajustables desde
-la interfaz y guardados en NVS. LED 1 evalúa ambas sondas localmente.
+AURA con `set_config` y guardados en NVS. LED 1 evalúa ambas sondas localmente.
 
 Ejemplo de cambio del intervalo de heladera (los demás parámetros se conservan):
 
@@ -331,7 +332,7 @@ Ejemplo de cambio del intervalo de heladera (los demás parámetros se conservan
 {
   "command": "set_config",
   "params": {"intervalo_heladera_s": 120},
-  "command_id": "<UUID generado por el backend>"
+  "command_id": "<id generado por AURA>"
 }
 ```
 
@@ -346,10 +347,9 @@ El detalle de capacidad, timestamps y aceptación central está en la guía mesh
 Una sonda inválida no produce medición; falla/recuperación se informa mediante
 alertas del contrato. Se rechaza también el centinela de arranque de 85 °C.
 
-Para entregar al repo de la cátedra, regenerar
-`python herramientas/aura/preparar_dispositivo.py` y copiar la carpeta del
-dispositivo. Sala y gateway van como propuesta de infraestructura separada,
-como requiere CONTRIBUTING del repo AURA. La ficha y sus tests viajan con el nodo.
+Para entregar al repo de la cátedra se copia la carpeta del dispositivo tal
+cual: es la misma que se edita acá, con su ficha y sus tests. Sala y gateway van
+como propuesta de infraestructura separada, como requiere CONTRIBUTING del repo AURA.
 
 ### 4. Validación en Hardware
 

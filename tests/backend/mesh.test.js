@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {randomUUID,createHash} from 'node:crypto';
-import {validateMeshPatch,validateMeshConfig,defaultMeshConfig,parseMeshData,parseMeshAlert,sensorDeviceId,appliedMeshConfig} from '../../software/backend/src/config/mesh-protocol.js';
+import {validateMeshPatch,validateMeshConfig,defaultMeshConfig,parseMeshData,parseMeshAlert,sensorDeviceId} from '../../software/backend/src/config/mesh-protocol.js';
 const device='650e8400-e29b-41d4-a716-446655440001',ingest='5f0c1b1e-8a6d-4a55-9f2b-7c3e2d1a0b99';
 const data=p=>parseMeshData(`devices/${device}/data`,JSON.stringify(p));
 test('una placa, dos campos; no metadata en values ni sentinelas',()=>{
@@ -25,12 +25,6 @@ test('parches independientes y recuperación común validada sin sobrescribir ot
  for(const patch of [{},{sensor:'freezer'},{intervalo_heladera_s:4},{recuperacion_s:59},{min_heladera_c:7},{min_freezer_c:-100},{max_freezer_c:-30},{min_heladera_c:2.001},{intervalo_freezer_s:true}])assert.throws(()=>validateMeshPatch(patch,c));
  assert.throws(()=>validateMeshConfig({recuperacion_s:300}));
 });
-test('solo aplicado + configuración completa coherente confirma ejecución',()=>{
- const c=defaultMeshConfig(),params={intervalo_heladera_s:5};
- for(const status of ['encolado','transmitido','recibido','rechazado'])assert.equal(appliedMeshConfig({status,details:{config:{...c,...params}}},params),null);
- assert.deepEqual(appliedMeshConfig({status:'aplicado',details:{config:{...c,...params}}},params),{...c,...params});
- assert.throws(()=>appliedMeshConfig({status:'aplicado',details:{config:c}},params));assert.throws(()=>appliedMeshConfig({status:'aplicado',details:{config:params}},params));
-});
 test('falla, recuperación y corte se informan en alerts, sin temperatura ficticia',()=>{
  for(const motivo of ['sin_respuesta','fuera_de_rango','recuperada'])assert.equal(parseMeshAlert(`alerts/${device}/sensor`,JSON.stringify({severity:'warning',details:{campo:'temp_freezer_c',motivo}})).details.motivo,motivo);
  const cut=parseMeshAlert(`alerts/${device}/energia`,JSON.stringify({severity:'warning',ts:'2026-10-04T12:00:00Z',details:{alimentacion:'bateria'}}));assert.equal(cut.measuredAt.toISOString(),'2026-10-04T12:00:00.000Z');
@@ -46,17 +40,16 @@ test('dedup local por ingest_id + sonda, conserva ts y propaga errores de base',
  await ctx.service.parseAndSaveMqttMessage(topic,payload);const dup=await ctx.service.parseAndSaveMqttMessage(topic,payload);assert.equal(records.size,2);assert.equal(alerts,2);assert.ok(dup.every(r=>r.duplicate));assert.equal(dup[0].orderAt.toISOString(),'2026-10-04T12:00:00.000Z');
  fail=true;await assert.rejects(ctx.service.parseAndSaveMqttMessage(topic,payload),/DB offline/);
 });
-test('dashboard conserva ediciones y separa recuperación; sin confirmado bloquea envío',async()=>{
+test('dashboard muestra la configuración vigente en solo lectura; sin reporte no inventa valores',async()=>{
  const source=fs.readFileSync(new URL('../../software/frontend/dashboard.js',import.meta.url),'utf8');
+ assert.ok(!source.includes("method:'POST',body:JSON.stringify(params)"),'el dashboard no publica configuración');
  const elements={},get=id=>elements[id]??=( {value:'',textContent:'',disabled:false} );
- const c={deviceId:device,experimental:true,transport:'mesh',reported:{params:defaultMeshConfig(),updatedAt:new Date().toISOString()}};
- const cut=source.slice(0,source.indexOf('async function saveConfig'));
+ const c={deviceId:device,transport:'mesh',readOnly:true,reported:{params:defaultMeshConfig(),updatedAt:new Date().toISOString()}};
+ const cut=source.slice(0,source.indexOf('function renderReading'));
  const ctx=vm.createContext({document:{getElementById:get},fetch:async()=>({ok:true,json:async()=>c}),Date});vm.runInContext(cut,ctx);
- await vm.runInContext('loadConfig()',ctx);assert.equal(get('freezerInterval').value,300);
- get('heladeraInterval').value=8;vm.runInContext("dirty.add('heladeraInterval')",ctx);c.reported.params.intervalo_heladera_s=10;
- await vm.runInContext('loadConfig()',ctx);assert.equal(get('heladeraInterval').value,8);assert.equal(get('freezerInterval').value,300);
- assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(fields.recovery)',ctx)),{recoveryInterval:'recuperacion_s'});
- c.reported=null;await vm.runInContext('loadConfig()',ctx);assert.equal(get('heladeraSave').disabled,true);
+ await vm.runInContext('loadConfig()',ctx);assert.equal(get('freezerInterval').value,300);assert.equal(get('recoveryInterval').value,300);assert.match(get('heladeraConfigState').textContent,/AURA/);
+ c.reported.params={...c.reported.params,intervalo_heladera_s:10};await vm.runInContext('loadConfig()',ctx);assert.equal(get('heladeraInterval').value,10);
+ c.reported=null;await vm.runInContext('loadConfig()',ctx);assert.equal(get('heladeraInterval').value,'');assert.equal(get('heladeraRange').textContent,'Sin rango confirmado por el nodo');
 });
 test('alerta sin RTC ordena por recepción sin inventar hora del corte ni dedupKey',async()=>{
  const source=fs.readFileSync(new URL('../../software/backend/src/services/mesh-alert-service.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replaceAll('export async function','async function')+'\nglobalThis.save=saveMeshAlert;';

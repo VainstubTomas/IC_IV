@@ -2,9 +2,11 @@
 
 En `software/backend`: `npm ci` y `npm test`. Los tests están en `tests/backend/`.
 No requieren una DB ni AURA reales: verifican validadores, dedup, persistencia,
-API Express, confirmación aplicado, parches y conservación de ediciones del dashboard.
+API Express, configuración en solo lectura en mesh (comandos solo desde AURA)
+y la configuración vigente reportada por el nodo en el dashboard.
 
-En `tests/firmware/host`, con C++17 y make: `make`. Ejecuta 22 static_asserts
+Las pruebas del nodo viven con su fuente, en `dispositivos/E1-PB-LECA-HFR01/tests`
+(C++17 y make: `make`). `make -C tests/firmware/host` las delega. Ejecutan 22 static_asserts
 de FIFO/ACK/rangos/CRC y tests de MeshStorage con Preferences falsa: registro
 individual, ACK sin reescribir la FIFO, reinicios, overflow, corte entre registro
 e índice, recuperación CRC y rechazo de NVS antigua sin borrado.
@@ -14,8 +16,8 @@ En Windows, los comandos g++ equivalentes están en el README general.
 
 `tests/firmware/esp32/tests_mesh` evalúa los 22 static_asserts al compilar para
 XIAO ESP32S3; no ejecuta las pruebas de NVS falsa en la placa.
-El paquete `dispositivos/E1-PB-LECA-HFR01/tests` contiene las pruebas propias
-autocontenidas del nodo, generadas para el CI del repo AURA.
+Esas mismas pruebas son las que corre el CI de aura-firmware sobre la carpeta
+del dispositivo: no hay copias que regenerar.
 
 Respaldo anterior a cambiar particiones: desde la raíz,
 `python -m unittest discover -s tests/nvs -v` verifica CRC, selección de copia

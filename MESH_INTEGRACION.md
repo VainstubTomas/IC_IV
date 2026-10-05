@@ -18,6 +18,15 @@ se conserva completo; su versión anterior quedó en `legacy/docs/`.
 | POST dentro del loop | Corregido: una tarea FreeRTOS procesa HTTP; el loop sigue atendiendo radio y MQTT. Las conexiones MQTT siguen teniendo timeout acotado. |
 | 85 °C de arranque | Corregido: se espera la conversión y se rechazan 85 °C, −127 °C, NaN y lecturas fuera del rango físico. |
 
+### Segunda revisión
+
+| Observación | Resultado en esta versión |
+|---|---|
+| El gateway acepta comandos del broker local | Corregido: el broker local recibe solo el espejo. El gateway se suscribe a `devices/<id>/command` únicamente en el broker AURA; el dashboard local muestra la configuración en solo lectura y el backend responde `409` al POST en mesh. Todo `command_id` de un `response` lo emitió AURA. |
+| La carpeta del dispositivo se presentaba como copia generada | Corregido: `dispositivos/E1-PB-LECA-HFR01/` es la fuente. Se eliminaron `firmware/nodo_mesh`, `firmware/mesh_comun` y `herramientas/aura/preparar_dispositivo.py`; sala, gateway y tests incluyen los headers de esa carpeta. |
+| Falta el fork y el PR a aura-firmware | Ver *Entrega al repositorio de la cátedra*: PR solo con la carpeta del dispositivo, su fila en el mapa y CODEOWNERS con los usuarios del grupo. |
+| Gateway de una placa y tramas que `infraestructura/` no entiende | El gateway de banco sigue siendo de una placa: alcanza para el banco. La adaptación de `infraestructura/` (tramas v3 y tabla MAC → UUID de §2.4) va en un PR aparte, sin mezclarla con el del dispositivo. |
+
 El contrato v3 está publicado como **propuesta** y contiene cambios marcados
 como pendientes de implementación central. Compilar este banco no demuestra
 que la infraestructura de la cátedra ya los implemente.
@@ -115,7 +124,11 @@ El gateway publica su propio LWT offline, no un LWT para cada sonda.
 
 **Espejo local optativo:** `ICIV_LOCAL_MQTT_ENABLED=1` habilita una segunda
 conexión con un client ID distinto. Resuelve ambos hosts y bloquea el espejo
-si coinciden IP y puerto, o si no se pueden resolver. El backend IC IV debe
+si coinciden IP y puerto, o si no se pueden resolver. El espejo es **de solo
+salida**: el gateway no se suscribe a `devices/<id>/command` en el broker local.
+Si aceptara comandos de ahí, un cambio hecho desde el dashboard no quedaría
+registrado en AURA (lo que §2.5 del contrato busca evitar) y el `aplicado` saldría
+hacia AURA con un `command_id` que AURA nunca emitió. El backend IC IV debe
 usar ese broker local, no el de AURA para recibir las mediciones de mesh.
 No es un segundo camino de ingesta central ni una copia durable garantizada:
 si el espejo falla, AURA puede tener la lectura aunque el dashboard local no.
@@ -145,11 +158,10 @@ de hasta 64 caracteres en este adaptador; no se exige UUID.
 `aplicado` con configuración completa viene del resultado explícito del nodo.
 `recibido`, el ACK de radio o HTTP 202 de la API local no confirman ejecución.
 
-El dashboard tiene dos formularios de sonda y otro de recuperación común.
-Envía solo diferencias, conserva ediciones durante las consultas periódicas y
-espera un reporte vigente antes de habilitar los envíos. Comandos siguen
-deshabilitados inicialmente (`AURA_CONFIG_EXPERIMENTAL=false`) hasta configurar
-el banco. Los umbrales de `/umbrales` son de email local, no un downlink.
+Los comandos llegan **solo desde AURA**. El dashboard local muestra en solo
+lectura la configuración vigente que reporta el nodo (por sonda y la
+recuperación común) y no publica comandos: en `mesh`, `POST /dispositivo/config`
+responde `409`. Los umbrales de `/umbrales` son de email local, no un downlink.
 
 ## Persistencia, capacidad y migración
 
@@ -227,22 +239,23 @@ coordinar la sala; no hay búsqueda automática de nuevas rutas.
 
 ## Entrega al repositorio de la cátedra y pendientes
 
-`dispositivos/E1-PB-LECA-HFR01/` es el paquete autocontenido generado del nodo:
-sketch del mismo nombre, ficha, bibliotecas versionadas, tabla NVS y tests.
+`dispositivos/E1-PB-LECA-HFR01/` es **la fuente** del nodo, no una copia: sketch
+del mismo nombre, protocolo, ficha, bibliotecas versionadas, tabla NVS y tests.
+Es la carpeta que se edita y se mantiene, acá y en aura-firmware.
 Ese código ya figura como heladera-freezer IC IV en el ejemplo recibido,
 pero ubicación final y alta UUID deben confirmarse en clase. No se crea un
 registro real a partir del ejemplo.
 
-La fuente editable sigue en `firmware/nodo_mesh` y `firmware/mesh_comun`.
-Regenerar el paquete con `python herramientas/aura/preparar_dispositivo.py`.
-La ficha del paquete sí se mantiene a mano. No subir `config_local.h` ni los
-ejecutables de tests. El paquete no necesita cambiar `comun/` del repo AURA.
+Ya no existen `firmware/nodo_mesh`, `firmware/mesh_comun` ni el generador del
+paquete: sala y gateway de banco incluyen los headers de esa carpeta. No subir
+`config_local.h` ni los ejecutables de tests. La carpeta no necesita cambiar
+`comun/` del repo AURA.
 
 Para la entrega que hace el grupo:
 
 1. Hacer fork de aura-firmware y crear la rama elegida.
-2. Copiar **solo** `dispositivos/E1-PB-LECA-HFR01/` al fork, completando responsables
-   GitHub/ubicación confirmados. Mantener la entrada de su mapa o ajustarla con
+2. Copiar **solo** `dispositivos/E1-PB-LECA-HFR01/` al fork, con los usuarios de
+   GitHub del grupo en la ficha y la ubicación confirmada. Mantener la entrada de su mapa o ajustarla con
    la cátedra; agregar el grupo en `.github/CODEOWNERS`.
 3. Ejecutar el validador, tests de carpeta y compilación con las bibliotecas
    de la ficha. Regenerar `autocontenido/` con la herramienta del repo AURA.

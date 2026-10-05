@@ -20,12 +20,14 @@ backend no reenvía el espejo a AURA. Guarda alertas sensor/energía del contrat
 v3 recibidas por el broker local; AURA todavía tiene limitaciones de persistencia
 de alertas. Sin hora válida no se garantiza dedup de alertas MQTT.
 
-`/dispositivo/config` devuelve configuración completa de la placa. POST acepta
-un parche de los siete parámetros documentados, sin selector de sonda, solo
-si `AURA_CONFIG_EXPERIMENTAL=true`. Los formularios envían únicamente diferencias;
-recuperación usa su formulario propio. Solo `aplicado` con `details.config`
-completo y coherente con el parche confirma ejecución. Un reporte de estado
-permite recuperar los ajustes vigentes aunque se haya perdido la respuesta.
+`/dispositivo/config` devuelve la configuración vigente que reportó la placa
+(`status.details.config`, espejado por el gateway). En `mesh` es de **solo
+lectura**: POST responde `409`. El broker local es un espejo y el gateway no
+acepta comandos desde él; la configuración se cambia en AURA, que así registra
+cada cambio y es la única que emite `command_id`. Los `response` espejados de
+comandos de AURA no tienen registro local y se ignoran; los umbrales del
+dashboard se actualizan con el siguiente reporte de estado del nodo.
+POST solo publica en `ICIV_TRANSPORT=lorawan` (legado) con `AURA_CONFIG_EXPERIMENTAL=true`.
 `/umbrales?sensor=...` configura emails locales, no el nodo.
 
 Las variables anteriores AURA_FRIDGE_DEVICE_ID/AURA_FREEZER_DEVICE_ID y la

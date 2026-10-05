@@ -1,4 +1,4 @@
-#include "../../../firmware/mesh_comun/mesh_ingest.h"
+#include "../../../simulaciones/mesh/nodo_gateway_mesh/mesh_ingest.h"
 #include <cassert>
 #include <cstdio>
 int main(){

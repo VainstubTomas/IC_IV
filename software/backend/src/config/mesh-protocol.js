@@ -33,12 +33,6 @@ export function parseMeshData(topic,payload){
  for(const sensor of SENSORS){const key='temp_'+sensor+'_c';if(!(key in p.values))continue;const t=p.values[key];if(typeof t!=='number'||!Number.isFinite(t)||t<-55||t>125||t===85)throw new Error('No aceptar centinelas ni temperaturas invalidas');readings.push({...meta,sensor,temperature:t,source:'mqtt_local'});}
  return readings;
 }
-export function appliedMeshConfig(event,params){
- if(event.status!=='aplicado')return null;
- const c=validateMeshConfig(event.details?.config);
- if(Object.keys(params).some(k=>c[k]!==params[k]))throw new Error('Reporte no coincide con el parche solicitado');
- return c;
-}
 export function parseMeshAlert(topic,payload){
  const m=/^alerts\/([^/]+)\/(sensor|energia)$/.exec(topic);if(!m||!isDeviceId(m[1]))return null;
  const p=parseObject(payload),severity=p.severity||'unknown';if(!['info','warning','high','critical','unknown'].includes(severity))throw new Error('Severidad invalida');

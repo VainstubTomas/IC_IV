@@ -1,4 +1,3 @@
-// GENERADO desde IC IV; editar origen y regenerar.
 /* IC IV: dos DS18B20 -> ESP-NOW -> sala -> gateway -> AURA.
  * Cola persistente, doble ACK final, primera lectura de corte protegida.
  * Basado en el encadenamiento fijo de aura-firmware; protocolo IC_IV v3.

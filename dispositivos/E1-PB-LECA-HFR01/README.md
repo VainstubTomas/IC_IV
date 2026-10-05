@@ -81,9 +81,8 @@ la tabla local del gateway. El ID de comando es texto opcional, máximo 64 bytes
 
 ## Notas
 
-Este paquete se genera desde el repo IC IV; allí se editan nodo/headers y se
-ejecuta `herramientas/aura/preparar_dispositivo.py`. No editar las copias de código
-a mano. Esta ficha se mantiene a mano y debe completarse antes del PR.
+Esta carpeta es la fuente del firmware: el código, los headers del protocolo y
+los tests se editan acá. No hay otra copia de la que se genere.
 Cada registro mide 34 bytes con CRC, índice 341 bytes; el ACK no reescribe la
 FIFO. Capacidad: 30 ordinarios por sonda + primera captura protegida por sonda
 + inicio del corte. Alertas consumen FIFO. No se ha medido vida útil de flash.
@@ -91,13 +90,13 @@ FIFO. Capacidad: 30 ordinarios por sonda + primera captura protegida por sonda
 **Requiere infraestructura compatible con el protocolo IC IV v3.** La base
 recibida de aura-firmware usa v1 y no interpreta estas tramas. Los headers
 están dentro de esta carpeta para que compile sin modificar `comun/`, pero eso
-no hace compatible la radio de infraestructura. Proponer sala/gateway y ACK
-como issue/PR separado; no modificar infraestructura en el PR del dispositivo.
+no hace compatible la radio de infraestructura. La adaptación de sala/gateway
+(tramas v3 y tabla MAC → UUID de §2.4) va en un PR separado a `infraestructura/`;
+este PR no modifica infraestructura.
 Confirmar con cátedra UUID/código/ubicación, circuito de alimentación,
 seguridad PMK/LMK, endpoint/autenticación y despliegue de `aplicado`/alertas.
 ACK de alerta confirma publicación MQTT, no guardado durable en AURA.
 En offline se espacia el envío y se apaga OLED; la radio sigue escuchando para
-recibir comandos, como pide el contrato. La autonomía queda por medir en placa.
+recibir comandos, como pide el contrato. Los comandos llegan solo desde AURA. La autonomía queda por medir en placa.
 
-Si se copia a aura-firmware, ver su docs/CONTRATO_MQTT.md y CONTRIBUTING.md.
-No incluir config_local.h, respaldos NVS, ejecutables ni el gateway del banco.
+No versionar config_local.h, respaldos NVS ni ejecutables de tests.

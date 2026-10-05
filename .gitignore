@@ -25,8 +25,9 @@ credenciales.h
 config_local.h
 build/
 tests/firmware/host/*.exe
-tests/firmware/host/test_mesh
-tests/firmware/host/test_storage
+dispositivos/*/tests/test_mesh
+dispositivos/*/tests/test_storage
+dispositivos/*/tests/*.exe
 tests/firmware/host/test_ingest
 dispositivos/*/tests/test_mesh
 dispositivos/*/tests/test_storage

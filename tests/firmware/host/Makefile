@@ -1,17 +1,15 @@
 CXX ?= g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -Ifakes
-# Solo test_ingest necesita ArduinoJson; indicar la ruta .../ArduinoJson/src.
+CXXFLAGS := -std=c++17 -Wall -Wextra
+# Las pruebas del nodo viven con su fuente, en dispositivos/E1-PB-LECA-HFR01/tests.
+# Aca queda solo la del gateway de banco (necesita ArduinoJson: ruta .../ArduinoJson/src).
+NODO := ../../../dispositivos/E1-PB-LECA-HFR01/tests
 ARDUINOJSON_INCLUDE ?=
 .PHONY: all clean ingest
-all: test_mesh test_storage
-	./test_mesh
-	./test_storage
-test_mesh: test_mesh.cpp mesh_assertions.h ../../../firmware/mesh_comun/mesh_core.h
-	$(CXX) $(CXXFLAGS) test_mesh.cpp -o $@
-test_storage: test_storage.cpp fakes/Preferences.h ../../../firmware/mesh_comun/mesh_storage.h
-	$(CXX) $(CXXFLAGS) test_storage.cpp -o $@
+all:
+	$(MAKE) -C $(NODO)
 ingest:
 	$(CXX) $(CXXFLAGS) -I"$(ARDUINOJSON_INCLUDE)" test_ingest.cpp -o test_ingest
 	./test_ingest
 clean:
-	rm -f test_mesh test_storage test_ingest *.exe
+	$(MAKE) -C $(NODO) clean
+	rm -f test_ingest *.exe

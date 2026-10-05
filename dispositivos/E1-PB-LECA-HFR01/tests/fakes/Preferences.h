@@ -1,4 +1,3 @@
-// GENERADO desde IC IV; editar origen y regenerar.
 #pragma once
 #include <stdint.h>
 #include <cstdio>
