@@ -26,7 +26,8 @@ npm test
 Desde la raíz, regenerar copias de Arduino IDE:
 
 ```powershell
-python firmware/generar_mesh_monolitico.py
+python herramientas/arduino/generar_mesh_monolitico.py
+python herramientas/aura/preparar_dispositivo.py
 ```
 
 Detener backend con Ctrl+C. Desde la raíz:
@@ -38,3 +39,6 @@ docker compose down
 Dashboard: http://localhost:8080/. Swagger: http://localhost:8080/api-docs.
 Ajustar URLs si cambia SERVERPORT. Configuración de hardware/AURA y guía de
 cortes/reintentos: [MESH_INTEGRACION.md](MESH_INTEGRACION.md).
+
+Pruebas C++ (con make/g++): `make -C tests/firmware/host`.
+Entrega AURA y migración de NVS: consultar MESH_INTEGRACION antes de flashear.

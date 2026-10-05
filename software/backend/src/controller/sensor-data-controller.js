@@ -1,4 +1,7 @@
-import sensorDataService from "../services/sensor-data-service.js";
+import legacyDataService from "../services/sensor-data-service.js";
+import meshDataService from "../services/mesh-data-service.js";
+import config from "../config/config.js";
+const sensorDataService=config.ICIV_TRANSPORT==='mesh'?meshDataService:legacyDataService;
 
 class SensorDataController {
   /**
@@ -7,7 +10,7 @@ class SensorDataController {
    */
   async postTelemetry(req, res) {
     try {
-      const { temperatura, temperature, rssi, deviceId, source } = req.body || {};
+      const { temperatura, temperature, rssi, deviceId, source, sensor } = req.body || {};
 
       const tempToUse = temperature !== undefined ? temperature : temperatura;
 
@@ -21,7 +24,7 @@ class SensorDataController {
       const result = await sensorDataService.saveTelemetry({
         temperature: tempToUse,
         rssi,
-        deviceId,
+        deviceId, sensor,
         source: source || "http"
       });
 

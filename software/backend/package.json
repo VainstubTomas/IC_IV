@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test ../../tests/backend/aura.test.js ../../tests/backend/mesh.test.js ../../tests/backend/mesh-api.test.js"
   },
   "keywords": [
     "iot",

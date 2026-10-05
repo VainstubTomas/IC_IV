@@ -12,14 +12,14 @@ function init(io, persistHandler) {
   if (config.MQTTBROKERCAPATH && fs.existsSync(config.MQTTBROKERCAPATH)) options.ca = fs.readFileSync(config.MQTTBROKERCAPATH);
   client = mqtt.connect(config.MQTTBROKERURL, options);
   client.on('connect', () => {
-    client.subscribe([TOPICS.DATA, TOPICS.STATUS, TOPICS.RESPONSE], { qos: 1 }, (err, granted) => {
+    client.subscribe([TOPICS.DATA, TOPICS.STATUS, TOPICS.RESPONSE, 'alerts/+/+'], { qos: 1 }, (err, granted) => {
       if (err || granted?.some(item => item.qos !== 1)) console.error('[mqtt] No se obtuvo suscripcion QoS 1:', err?.message || granted);
-      else console.log('[mqtt] Suscrito al broker AURA con QoS 1');
+      else console.log('[mqtt] Suscrito al broker configurado con QoS 1');
     });
   });
   client.on('error', err => {
     console.error('[mqtt]', err.message);
-    io?.emit('system_fault', { source: 'MQTTBROKER', message: 'Fallo de conexion al broker AURA' });
+    io?.emit('system_fault', { source: 'MQTTBROKER', message: 'Fallo de conexion al broker configurado' });
   });
   // MQTT.js espera este callback antes de PUBACK. No confirmar lecturas sin guardar.
   client.handleMessage = (packet, callback) => {

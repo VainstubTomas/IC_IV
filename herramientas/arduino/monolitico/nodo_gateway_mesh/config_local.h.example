@@ -1,0 +1,21 @@
+#pragma once
+#define ICIV_WIFI_SSID "CAMBIAR"
+#define ICIV_WIFI_PASS "CAMBIAR"
+#define ICIV_MQTT_HOST "CAMBIAR" // broker AURA: nunca recibe el espejo data de mesh
+#define ICIV_MQTT_PORT 1883
+#define ICIV_MQTT_USER ""
+#define ICIV_MQTT_PASS ""
+#define ICIV_API_BASE "http://CAMBIAR:8000"
+#define ICIV_API_TOKEN ""
+#define ICIV_TENANT_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_GATEWAY_ID "00000000-0000-0000-0000-000000000000"
+#define ICIV_DEVICE_ID "00000000-0000-0000-0000-000000000000" // una placa, dos campos
+#define ICIV_SENSOR_MAC {0,0,0,0,0,0}
+#define ICIV_ROOM_MAC {0,0,0,0,0,0} // cero: enlace directo
+#define ICIV_AURA_INGEST_ENABLED 0 // habilitar tras completar API/tenant/UUID
+// Espejo auxiliar del dashboard IC IV: broker distinto de AURA.
+#define ICIV_LOCAL_MQTT_ENABLED 0
+#define ICIV_LOCAL_MQTT_HOST "CAMBIAR"
+#define ICIV_LOCAL_MQTT_PORT 1883
+#define ICIV_LOCAL_MQTT_USER ""
+#define ICIV_LOCAL_MQTT_PASS ""

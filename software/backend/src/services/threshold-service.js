@@ -1,14 +1,16 @@
 import { isDeviceId } from "../config/mqtt/aura-protocol.js";
 import thresholdRepository from "../repository/threshold-repository.js";
 import config from "../config/config.js";
+import {validateSensor} from '../config/mesh-protocol.js';
 
 class ThresholdService {
   /**
    * Obtiene el umbral vigente de un dispositivo
    */
-  async getThresholds(deviceId = config.AURA_DEVICE_ID) {
+  async getThresholds(deviceId = config.AURA_DEVICE_ID, sensor = "heladera") {
+    validateSensor(sensor);
     if (!isDeviceId(deviceId)) return { deviceId: null, min: null, max: null, configured: false };
-    const config = await thresholdRepository.getByDevice(deviceId);
+    const config = await thresholdRepository.getByDevice(deviceId,sensor);
 
     if (!config) {
       return {
@@ -31,7 +33,8 @@ class ThresholdService {
   /**
    * Guarda el umbral de un dispositivo
    */
-  async saveThresholds({ deviceId = config.AURA_DEVICE_ID, min, max }) {
+  async saveThresholds({ deviceId = config.AURA_DEVICE_ID, min, max, sensor = "heladera" }) {
+    validateSensor(sensor);
     if (!isDeviceId(deviceId)) throw new Error("Configurar el UUID AURA para los umbrales");
     const minVal = Number(min);
     const maxVal = Number(max);
@@ -44,7 +47,7 @@ class ThresholdService {
       throw new Error("El umbral mínimo debe ser menor al máximo.");
     }
 
-    const saved = await thresholdRepository.upsert({ deviceId, min: minVal, max: maxVal });
+    const saved = await thresholdRepository.upsert({ deviceId, sensor, min: minVal, max: maxVal });
 
     // Umbrales de email: viven solo en la plataforma, no son configuracion del nodo.
 

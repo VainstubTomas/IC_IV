@@ -24,9 +24,19 @@ credenciales.h
 # Red, MAC e identificadores locales de los roles mesh
 config_local.h
 build/
-firmware/tests_host/*.exe
+tests/firmware/host/*.exe
+tests/firmware/host/test_mesh
+tests/firmware/host/test_storage
+tests/firmware/host/test_ingest
+dispositivos/*/tests/test_mesh
+dispositivos/*/tests/test_storage
+dispositivos/*/tests/*.exe
+# Respaldos locales de NVS pueden contener identificadores de produccion
+respaldo_nvs*.json
 
 # Archivos de sistema operativo e IDEs
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db
 .vscode/

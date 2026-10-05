@@ -1,4 +1,4 @@
-// Contrato MQTT AURA v2.0: secciones 2, 3 y 5.
+// Contrato MQTT AURA v3.0: secciones 2, 3 y 5.
 export const isDeviceId = id => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 export function parseAuraData(topic, payload) {
   const match = /^devices\/([^/]+)\/data$/.exec(topic);
@@ -20,7 +20,7 @@ export function validateConfig(p) {
   return p;
 }
 
-export const RESPONSE_STATES = Object.freeze(['encolado', 'transmitido', 'recibido', 'rechazado']);
+export const RESPONSE_STATES = Object.freeze(['encolado', 'transmitido', 'recibido', 'aplicado', 'rechazado']);
 export function parseObject(payload) {
   const json = JSON.parse(payload);
   if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('El payload debe ser objeto JSON');
@@ -43,6 +43,7 @@ export function previousResponseStates(status) {
     encolado: ['publishing', 'pending', 'encolado'],
     transmitido: ['publishing', 'pending', 'encolado', 'transmitido'],
     recibido: ['publishing', 'pending', 'encolado', 'transmitido', 'recibido'],
+    aplicado: ['publishing','pending','encolado','transmitido','recibido','aplicado'],
     rechazado: ['publishing', 'pending', 'encolado', 'transmitido', 'rechazado']
   }[status] || [];
 }

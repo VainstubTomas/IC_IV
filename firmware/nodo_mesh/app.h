@@ -1,6 +1,6 @@
 /* IC IV: dos DS18B20 -> ESP-NOW -> sala -> gateway -> AURA.
  * Cola persistente, doble ACK final, primera lectura de corte protegida.
- * Basado en el encadenamiento fijo de aura-firmware; protocolo IC_IV v2.
+ * Basado en el encadenamiento fijo de aura-firmware; protocolo IC_IV v3.
  * Arduino ESP32 3.x, XIAO_ESP32S3, USB CDC Enabled.
  */
 #include <OneWire.h>
@@ -59,7 +59,7 @@ bool rtcOk=false,clockOk=false,storageOk=false,radioOk=false,radioRunning=false;
 Journal journal;
 MeshStorage store;
 float latest[2]={NAN,NAN};
-bool sensorKnown[2]={false,false},snapshotPending=true;
+bool sensorKnown[2]={false,false},snapshotPending=true,forceSnapshot=true;
 uint32_t lastRadioSend=0;
 uint32_t lastMeasure[2]={0,0}, conversionStart=0,conversionEpoch=0;
 uint32_t displayAt=0, nextRecovery=0, cutEpoch=0;
@@ -72,6 +72,7 @@ LinkState linkState=UNKNOWN;
 Muestra flight;
 bool waiting=false, gatewayReceived=false,everGateway=false,scanning=false;
 uint8_t attempts=0,scanChannel=1;
+uint8_t listeningChannel=ICIV_CHANNEL;
 uint32_t sentAt=0,scanAt=0;
 uint16_t seq=0;
 
@@ -104,7 +105,12 @@ void readPower(uint32_t now) {
   if(uint32_t(now-powerChangedAt)<200)return; // antirrebote de entrada
   if(!journal.powerKnown || observed!=bool(journal.onBattery)) {
     const bool transitioned=!journal.powerKnown || !journal.onBattery;
-    journal.powerKnown=1;journal.onBattery=observed;battery=observed;
+    journal.powerKnown=1;journal.onBattery=observed;battery=observed;snapshotPending=true;
+    Muestra event={};newId(event.id);event.kind=ALERTA_ENERGIA;event.state=observed;
+    event.sensor=0;event.temp100=TEMP_INVALIDA;event.measuredAt=readEpoch();
+    event.flags=POWER_KNOWN|(observed?BATTERY:0)|(event.measuredAt?CLOCK_VALID:0);
+    if(observed && (!journal.hasPower || journal.powerAcked)) {journal.firstPower=event;journal.hasPower=1;journal.powerAcked=0;}
+    else pushSample(journal,event);
     if(observed && transitioned) {
       cutEpoch=readEpoch();journal.cutAt=cutEpoch;journal.capturePending=1;needsFirst=true;
       Serial.println("[ENERGIA] Bateria: capturar ambas sondas; hora = deteccion del corte");
@@ -123,30 +129,42 @@ void beginMeasurements(uint32_t now) {
   conversion=true;conversionStart=now;
 }
 void finishMeasurements(uint32_t now) {
-  if(!conversion || uint32_t(now-conversionStart)<100)return; // 9 bits: 94 ms
+  if(!conversion || uint32_t(now-conversionStart)<100)return;
   for(int s=0;s<2;++s)if(dueMask&(1<<s)) {
-    const float t=probes[s]->getTempCByIndex(0);
-    latest[s]=(isfinite(t)&&t>=-55&&t<=125)?t:NAN;
-    sensorKnown[s]=true;snapshotPending=true;
-    Muestra m={};newId(m.id);m.sensor=s;m.measuredAt=conversionEpoch;
-    m.cutAt=journal.cutAt;m.temp100=isfinite(latest[s])?int16_t(lround(latest[s]*100)):TEMP_INVALIDA;
-    m.flags=(isfinite(latest[s])?VALID:0)|(battery?BATTERY:0)|(captureCut?POWER_FIRST:0)|(sampleClock?CLOCK_VALID:0)|((ICIV_POWER_PIN>=0 && journal.powerKnown)?POWER_KNOWN:0);
-    // No pisar primera muestra no confirmada aunque haya otro corte.
-    if(!captureCut || !protectFirst(journal,m))pushSample(journal,m);
-    Serial.printf("[MUESTRA] %s %.2f C t=%lu pendientes=%u descartadas=%lu\n",s?"freezer":"heladera",latest[s],(unsigned long)m.measuredAt,journal.count[s],(unsigned long)journal.dropped[s]);
+    const bool ready=probes[s]->isConversionComplete();
+    const float t=ready?probes[s]->getTempCByIndex(0):NAN;
+    uint8_t state=classifyTemperature(t,ready);
+    bool changed=!journal.sensorKnown[s] || journal.sensorState[s]!=state;
+    bool recovered=journal.sensorKnown[s] && journal.sensorState[s]!=SONDA_OK && state==SONDA_OK;
+    latest[s]=state==SONDA_OK?t:NAN;sensorKnown[s]=true;snapshotPending=true;
+    journal.sensorKnown[s]=1;journal.sensorState[s]=state;
+    Muestra m={};newId(m.id);m.sensor=s;m.measuredAt=conversionEpoch;m.cutAt=journal.cutAt;
+    m.temp100=state==SONDA_OK?int16_t(lround(t*100)):TEMP_INVALIDA;
+    m.flags=(state==SONDA_OK?VALID:0)|(battery?BATTERY:0)|(captureCut?POWER_FIRST:0)|(sampleClock?CLOCK_VALID:0)|((ICIV_POWER_PIN>=0&&journal.powerKnown)?POWER_KNOWN:0);
+    if(state!=SONDA_OK){m.kind=ALERTA_SENSOR;m.state=state;}
+    if(state==SONDA_OK || changed) {
+      if(!captureCut || !protectFirst(journal,m))pushSample(journal,m);
+    }
+    if(recovered) {
+      Muestra alert=m;newId(alert.id);alert.kind=ALERTA_SENSOR;alert.state=SONDA_OK;
+      alert.flags&=~(VALID|POWER_FIRST);alert.temp100=TEMP_INVALIDA;pushSample(journal,alert);
+    }
+    Serial.printf("[MUESTRA] %s %.2f C estado=%u t=%lu pendientes=%u descartadas=%lu\n",s?"freezer":"heladera",latest[s],state,(unsigned long)m.measuredAt,journal.count[s],(unsigned long)journal.dropped[s]);
   }
   if(captureCut)journal.capturePending=0;
   conversion=false;if(storageOk)commit();updateOutputs();
-}
-void sleepRadio() {
-  if(radioRunning) {esp_wifi_stop();radioRunning=false;}
 }
 void wakeRadio() {
   if(!radioRunning && radioOk) {radioRunning=esp_wifi_start()==ESP_OK;}
 }
 void failDelivery(uint32_t now) {
   linkState=everGateway?CENTRAL_DOWN:GATEWAY_DOWN;waiting=false;scanning=false;
-  nextRecovery=now+journal.config.recoveryS*1000UL;sleepRadio();updateOutputs();
+  forceSnapshot=false;
+  nextRecovery=now+journal.config.recoveryS*1000UL;
+  // Offline limita transmisiones, no apaga la escucha de comandos (contrato
+  // AURA 3.3). Si el barrido fallo, volver al ultimo canal conocido del padre.
+  if(radioRunning)esp_wifi_set_channel(listeningChannel,WIFI_SECOND_CHAN_NONE);
+  updateOutputs();
   Serial.println(everGateway?"[OFFLINE] Gateway confirmo; falta central":"[OFFLINE] Sin confirmacion del gateway final");
 }
 void transmit(uint32_t now) {
@@ -161,41 +179,45 @@ void receiveMessages(uint32_t now) {
     const auto& t=p.trama;
     if(memcmp(p.sender,parentMac,6) || memcmp(t.origen,gatewayMac,6) || memcmp(t.destino,ownMac,6))continue;
     if(t.tipo==PROBE_ACK && scanning && t.largo==0) {
+      wifi_second_chan_t second;esp_wifi_get_channel(&listeningChannel,&second);
+      forceSnapshot=true;
       scanning=false;waiting=true;attempts=0;everGateway=false;transmit(now);continue;
     }
     if(waiting && t.largo==16 && sameId(t.payload,flight.id)) {
       if(t.tipo==ACK_GATEWAY) {gatewayReceived=true;everGateway=true;}
-      if(t.tipo==ACK_CENTRAL) {
+      if((t.tipo==ACK_CENTRAL && flight.kind==MEDICION)||(t.tipo==ACK_ALERT && flight.kind!=MEDICION)) {
         acknowledge(journal,flight.id);
         if(!commit())return;
-        waiting=false;linkState=ONLINE;attempts=0;nextRecovery=now;snapshotPending=true;updateOutputs();
-        Serial.println("[ACK] Central confirmo: muestra persistida; retirar pendiente");
+        waiting=false;if(t.tipo==ACK_CENTRAL)linkState=ONLINE;attempts=0;nextRecovery=now;snapshotPending=true;updateOutputs();
+        Serial.println(t.tipo==ACK_CENTRAL?"[ACK] AURA REST persistio muestra":"[ACK ALERTA] Gateway publico en MQTT; no acredita persistencia central");
       }
     }
     if(t.tipo==COMANDO && t.largo==sizeof(ConfigCommand)) {
       ConfigCommand cmd;memcpy(&cmd,t.payload,sizeof(cmd));
-      ConfigResult result={cmd,0};
-      if(cmd.sensor<2 && validSensorConfig(cmd.config) && cmd.recoveryS>=60 && cmd.recoveryS<=86400 && storageOk) {
-        Journal old=journal;
-        journal.config.sensors[cmd.sensor]=cmd.config;journal.config.recoveryS=cmd.recoveryS;
-        memcpy(journal.lastConfigId,cmd.id,16);
-        if(commit())result.applied=1;else journal=old;
+      ConfigResult result={cmd,0};MeshConfig next;
+      if(memchr(cmd.id,0,sizeof(cmd.id)) && applyPatch(journal.config,cmd,next) && storageOk) {
+        MeshConfig old=journal.config;journal.config=next;
+        if(commit())result.applied=1;else journal.config=old;
       }
+      result.command.config=journal.config;
       if(result.applied)updateOutputs();
       radioSend(parentMac,frame(CONFIG_RESULT,ownMac,gatewayMac,t.seq,&result,sizeof(result)));
-      lastRadioSend=now;snapshotPending=true;
+      lastRadioSend=now;snapshotPending=true;forceSnapshot=true;
     }
   }
 }
 void sendSnapshot(uint32_t now) {
   if(!snapshotPending || !storageOk || !radioRunning || scanning || uint32_t(now-lastRadioSend)<30)return;
+  if(!macSet(parentMac)||!macSet(gatewayMac))return;
+  if((linkState==GATEWAY_DOWN||linkState==CENTRAL_DOWN)&&!forceSnapshot)return;
   NodeSnapshot snapshot={};snapshot.config=journal.config;
   snapshot.powerKnown=ICIV_POWER_PIN>=0 && journal.powerKnown;snapshot.onBattery=battery;snapshot.cutAt=journal.cutAt;
   for(int s=0;s<2;++s) {
     snapshot.pending[s]=journal.count[s]+(journal.hasFirst[s]&&!journal.firstAcked[s]?1:0);
-    snapshot.dropped[s]=journal.dropped[s];snapshot.sensorKnown[s]=sensorKnown[s];snapshot.sensorValid[s]=isfinite(latest[s]);
+    snapshot.dropped[s]=journal.dropped[s];snapshot.sensorKnown[s]=sensorKnown[s];snapshot.sensorValid[s]=journal.sensorState[s]==SONDA_OK;snapshot.sensorState[s]=journal.sensorState[s];
   }
-  if(radioSend(parentMac,frame(CONFIG_SNAPSHOT,ownMac,gatewayMac,seq++,&snapshot,sizeof(snapshot))))snapshotPending=false;
+  snapshot.pending[0]+=journal.hasPower&&!journal.powerAcked?1:0;
+  if(radioSend(parentMac,frame(CONFIG_SNAPSHOT,ownMac,gatewayMac,seq++,&snapshot,sizeof(snapshot)))){snapshotPending=false;forceSnapshot=false;}
   lastRadioSend=now;
 }
 void startScan(uint32_t now) {
@@ -251,6 +273,7 @@ void setup() {
   for(int s=0;s<2;++s) {probes[s]->begin();probes[s]->setResolution(9);probes[s]->setWaitForConversion(false);}
   storageOk=store.begin(journal);if(!storageOk)journalInit(journal);
   needsFirst=journal.capturePending;cutEpoch=journal.cutAt;
+  for(int s=0;s<2;++s)sensorKnown[s]=journal.sensorKnown[s];
   battery=ICIV_POWER_PIN>=0 && journal.powerKnown && journal.onBattery;
   radioOk=radioInit(ICIV_CHANNEL);radioRunning=radioOk;
   if(radioOk)addPeer(parentMac);

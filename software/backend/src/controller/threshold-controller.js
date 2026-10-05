@@ -9,7 +9,7 @@ class ThresholdController {
   async getThresholds(req, res) {
     try {
       const deviceId = req.query.deviceId || config.AURA_DEVICE_ID;
-      const thresholds = await thresholdService.getThresholds(deviceId);
+      const thresholds = await thresholdService.getThresholds(deviceId,req.query.sensor || 'heladera');
       return res.status(200).json(thresholds);
     } catch (error) {
       console.error("[controller] Error en getThresholds:", error);
@@ -26,7 +26,7 @@ class ThresholdController {
    */
   async postThresholds(req, res) {
     try {
-      const { min, max, deviceId } = req.body || {};
+      const { min, max, deviceId, sensor } = req.body || {};
 
       if (min === undefined || max === undefined) {
         return res.status(400).json({
@@ -35,7 +35,7 @@ class ThresholdController {
         });
       }
 
-      const result = await thresholdService.saveThresholds({ deviceId, min, max });
+      const result = await thresholdService.saveThresholds({ deviceId, min, max, sensor });
 
       return res.status(200).json({
         status: "success",

@@ -9,8 +9,11 @@ import deviceEventService from './services/device-event-service.js';
 import SensorData from './models/sensor-data-model.js';
 import DeviceStatus from './models/device-status-model.js';
 import DeviceCommand from './models/device-command-model.js';
-import PowerEvent from './models/power-event-model.js';
-import { savePowerEvent } from './services/power-event-service.js';
+import meshDataService from './services/mesh-data-service.js';
+import MeshReading from './models/mesh-reading-model.js';
+import MeshThreshold from './models/mesh-threshold-model.js';
+import MeshAlert from './models/mesh-alert-model.js';
+import {saveMeshAlert} from './services/mesh-alert-service.js';
 
 async function mainServer() {
 
@@ -26,7 +29,7 @@ async function mainServer() {
 
     // DB e indices de deduplicacion listos antes de recibir mensajes MQTT.
     await bdInit();
-    await Promise.all([SensorData.init(), DeviceStatus.init(), DeviceCommand.init(), PowerEvent.init()]);
+    await Promise.all([SensorData.init(), DeviceStatus.init(), DeviceCommand.init(),MeshReading.init(),MeshThreshold.init(),MeshAlert.init()]);
     // Las lecturas anteriores no tenian hora de medicion separada de recepcion.
     // Completar la clave de orden antes de recibir historiales acumulados del nodo.
     await SensorData.updateMany(
@@ -34,8 +37,9 @@ async function mainServer() {
       [{ $set: { orderAt: { $ifNull: ['$measuredAt', '$createdAt'] } } }]
     );
     mqttConfig.init(io, async (topic, payload) => {
+      if(topic.startsWith('alerts/'))return saveMeshAlert(topic,payload);
+      if(config.ICIV_TRANSPORT==='mesh' && topic.endsWith('/data'))return meshDataService.parseAndSaveMqttMessage(topic,payload);
       if (!topic.endsWith('/data')) return deviceEventService.processMessage(topic,payload);
-      await savePowerEvent(topic,payload);
       return sensorDataService.parseAndSaveMqttMessage(topic,payload);
     });
 

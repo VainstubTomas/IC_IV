@@ -2,7 +2,6 @@ import config from "../config/config.js";
 import { parseAuraData, isDeviceId } from "../config/mqtt/aura-protocol.js";
 import sensorDataRepository from "../repository/sensor-data-repository.js";
 import alertService from "./alert-service.js";
-import { parseMeshMetadata } from '../config/mesh-protocol.js';
 
 /**
  * Formatea una fecha a string legible YYYY-MM-DD HH:mm:ss
@@ -65,7 +64,8 @@ class SensorDataService {
    */
   async getLatestTelemetry(sensor = 'heladera') {
     if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
-    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : config.AURA_FREEZER_DEVICE_ID;
+    // El codec LoRaWAN archivado solo define una sonda.
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : null;
     if (!isDeviceId(deviceId)) return null;
     const latest = await sensorDataRepository.getLatest(deviceId);
 
@@ -91,7 +91,8 @@ class SensorDataService {
    */
   async getTelemetryHistory(limit = 50, sensor = 'heladera') {
     if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
-    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : config.AURA_FREEZER_DEVICE_ID;
+    // El codec LoRaWAN archivado solo define una sonda.
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : null;
     if (!isDeviceId(deviceId)) return [];
     const records = await sensorDataRepository.getHistory(limit, deviceId);
     return records.map((r) => ({
@@ -114,11 +115,7 @@ class SensorDataService {
     let reading;
     try { reading = parseAuraData(topic, payloadStr); }
     catch (err) { console.warn('[sensor-service] Payload AURA rechazado:', err.message); return null; }
-    if (reading && (config.AURA_DEVICE_ID || config.AURA_FREEZER_DEVICE_ID) && ![config.AURA_DEVICE_ID,config.AURA_FREEZER_DEVICE_ID].includes(reading.deviceId)) return null;
-    if (reading && config.AURA_MESH_EXTENSIONS_ENABLED) {
-      try { Object.assign(reading, parseMeshMetadata(topic,payloadStr)); }
-      catch (_) { return null; }
-    }
+    if (reading && config.AURA_DEVICE_ID && reading.deviceId!==config.AURA_DEVICE_ID) return null;
     // Errores de DB se propagan: no confirmar MQTT antes de persistir.
     return reading ? await this.saveTelemetry(reading) : null;
   }
