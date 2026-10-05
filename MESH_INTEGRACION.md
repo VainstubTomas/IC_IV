@@ -242,6 +242,10 @@ coordinar la sala; no hay búsqueda automática de nuevas rutas.
 `dispositivos/E1-PB-LECA-HFR01/` es **la fuente** del nodo, no una copia: sketch
 del mismo nombre, protocolo, ficha, bibliotecas versionadas, tabla NVS y tests.
 Es la carpeta que se edita y se mantiene, acá y en aura-firmware.
+`app.h` coordina arranque y ciclo; sondas, pantalla/LEDs, reloj, energía,
+almacenamiento y comunicación tienen módulos propios. El mapa de archivos
+está en el README del nodo. La modularización conserva el protocolo,
+la configuración y el formato NVS; no requiere migrar datos guardados.
 Ese código ya figura como heladera-freezer IC IV en el ejemplo recibido,
 pero ubicación final y alta UUID deben confirmarse en clase. No se crea un
 registro real a partir del ejemplo.

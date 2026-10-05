@@ -17,6 +17,32 @@ Una XIAO lee dos sondas DS18B20 independientes, evalúa umbrales localmente,
 enciende LED de alarma/desconexión y conserva una cola durante cortes.
 La placa tiene **un UUID**; cada sonda tiene su nombre de medición.
 
+## Organización del código
+
+El sketch `E1-PB-LECA-HFR01.ino` carga `app.h`, que coordina el arranque
+y el ciclo de ejecución. La lógica está separada por responsabilidad:
+
+| Archivo | Responsabilidad |
+|---|---|
+| `app.h` | Orden de inicialización y llamadas del ciclo principal. |
+| `configuracion.h` | Valores por defecto de pines, MAC, canal y RTC; admite `config_local.h`. |
+| `estado_nodo.h` | Objetos de hardware y estado compartido entre módulos. |
+| `sondas.h` | Lecturas independientes de los dos DS18B20, validación y alertas de falla/recuperación. |
+| `pantalla.h` | OLED, LED de umbral y LED de desconexión. |
+| `reloj.h` | Inicialización y validación del RTC; fecha de medición en UTC. |
+| `energia.h` | Detección de batería/red y captura del inicio del corte. |
+| `almacenamiento.h` | Carga y guardado del journal en NVS; IDs de eventos. |
+| `comunicacion.h` | Envíos ESP-NOW, ACK, reintentos, barrido de recuperación y comandos remotos. |
+| `mesh_core.h` | Formato de tramas, FIFO, validación de configuración y reglas compartidas. |
+| `mesh_radio.h` | Adaptador ESP-NOW y cola de recepción del callback. |
+| `mesh_storage.h` | Implementación NVS por registros, índices y CRC. |
+
+Todos los módulos están junto al sketch y se editan en esta carpeta. Se usan
+headers para conservar la compilación como un solo sketch y la compatibilidad
+con el generador de `autocontenido/` de AURA, que copia los archivos de la carpeta.
+`config_local.h` sigue siendo local e ignorado por Git. `tests/` contiene
+las pruebas del nodo y no se carga en la placa.
+
 ## Hardware
 
 | Componente | Modelo | Conexión inicial configurable |
