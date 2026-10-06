@@ -1,3 +1,5 @@
+// modo de bateria
+
 #ifndef ICIV_NODO_ENERGIA_H
 #define ICIV_NODO_ENERGIA_H
 

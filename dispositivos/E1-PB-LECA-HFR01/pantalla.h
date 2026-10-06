@@ -1,3 +1,5 @@
+// pantalla OLED
+
 #ifndef ICIV_NODO_PANTALLA_H
 #define ICIV_NODO_PANTALLA_H
 

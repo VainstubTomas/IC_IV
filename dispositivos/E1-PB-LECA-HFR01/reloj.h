@@ -1,7 +1,8 @@
+// RTC DS3231: hora de medicion UTC y validacion del reloj.
+
 #ifndef ICIV_NODO_RELOJ_H
 #define ICIV_NODO_RELOJ_H
 
-// RTC DS3231: hora de medicion UTC y validacion del reloj.
 #include "estado_nodo.h"
 
 void beginClock() {

@@ -1,3 +1,5 @@
+// conectividad con el gateway
+
 #ifndef ICIV_NODO_COMUNICACION_H
 #define ICIV_NODO_COMUNICACION_H
 
