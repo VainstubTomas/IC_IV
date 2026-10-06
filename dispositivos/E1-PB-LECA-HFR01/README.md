@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Ubicación** | Propuesta: Edificio 1, planta baja, LabECA; confirmar instalación en clase. |
-| **Responsable** | Grupo IC IV 2026; completar usuarios GitHub antes del PR. |
+| **Responsable** | Grupo IC IV 2026; VainstubTomas, Bernidb, Kinggrass265, JuanCruz46 |
 | **Estado** | En desarrollo, compilado y probado en host; pendiente de banco físico. |
 | **Instalado** | Todavía no. |
 | **Transporte** | Mesh ESP-NOW, interior; sensor → sala → gateway. |
