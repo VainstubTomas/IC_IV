@@ -1,130 +1,49 @@
-import mqtt from "mqtt";
-import fs from "fs";
-import config from "../config.js";
-import { TOPICS } from "./mqtt-topics.js";
-
-// broker config
-const MQTTBROKERURL = config.MQTTBROKERURL;
-
-// mqtt client
+import mqtt from 'mqtt';
+import fs from 'fs';
+import config from '../config.js';
+import { TOPICS, commandTopic } from './mqtt-topics.js';
 let client = null;
-
-/**
- * socket.io objeto from app.js to listen events in live
- * @param {object} io
- * @param {(topic: string, payload: string) => Promise<any>} [persistHandler] callback para persistir mensajes MQTT entrantes, inyectado por el composition root para evitar un import circular con la capa de servicio
- */
-
 function init(io, persistHandler) {
-    if(client) return;
-
-    // Opciones de conexión MQTT
-    const mqttOptions = {
-        clean: true
+  if (client) return;
+  const options = { clean: false, clientId: config.MQTT_CLIENT_ID, protocolVersion: 4, reconnectPeriod: 3000 };
+  if (!options.clientId) throw new Error('Se requiere MQTT_CLIENT_ID estable');
+  if (config.BROKERUSERNAME) options.username = config.BROKERUSERNAME;
+  if (config.BROKERPASSW) options.password = config.BROKERPASSW;
+  if (config.MQTTBROKERCAPATH && fs.existsSync(config.MQTTBROKERCAPATH)) options.ca = fs.readFileSync(config.MQTTBROKERCAPATH);
+  client = mqtt.connect(config.MQTTBROKERURL, options);
+  client.on('connect', () => {
+    client.subscribe([TOPICS.DATA, TOPICS.STATUS, TOPICS.RESPONSE, 'alerts/+/+'], { qos: 1 }, (err, granted) => {
+      if (err || granted?.some(item => item.qos !== 1)) console.error('[mqtt] No se obtuvo suscripcion QoS 1:', err?.message || granted);
+      else console.log('[mqtt] Suscrito al broker configurado con QoS 1');
+    });
+  });
+  client.on('error', err => {
+    console.error('[mqtt]', err.message);
+    io?.emit('system_fault', { source: 'MQTTBROKER', message: 'Fallo de conexion al broker configurado' });
+  });
+  // MQTT.js espera este callback antes de PUBACK. No confirmar lecturas sin guardar.
+  client.handleMessage = (packet, callback) => {
+    const process = async () => {
+      try {
+        const topic = packet.topic.toString(), payload = packet.payload.toString();
+        const data = await persistHandler(topic, payload);
+        io?.emit('mqtt_update', { topic, data });
+        callback();
+      } catch (err) {
+        console.error('[mqtt] Persistencia fallida; se reintentara sin confirmar:', err.message);
+        setTimeout(process, 3000);
+      }
     };
-
-    if (config.BROKERUSERNAME) mqttOptions.username = config.BROKERUSERNAME;
-    if (config.BROKERPASSW) mqttOptions.password = config.BROKERPASSW;
-
-    // Solo cargar certificado CA si está definido y el archivo existe
-    if (config.MQTTBROKERCAPATH && fs.existsSync(config.MQTTBROKERCAPATH)) {
-        mqttOptions.ca = fs.readFileSync(config.MQTTBROKERCAPATH);
-    }
-
-    client = mqtt.connect(MQTTBROKERURL, mqttOptions);
-
-    // drive connection
-    client.on("connect", () => {
-        console.log("[mqtt-config] cliente mqtt conectado al broker 🔌");
-        
-        // topic base subscription
-        client.subscribe(TOPICS.STATUSBASE, (err) => {
-            if (err) {
-                console.log('[mqtt-config] Error al suscribirse a tópicos:', err);
-            } else {
-                console.log(`[mqtt-config] Suscrito a la base de topicos ${TOPICS.STATUSBASE}`);
-            }
-        });
-    });
-
-    // estado mqtt
-    client.on("error", (err) => {
-
-        console.log('[mqtt-config] Error en el cliente MQTT:', err.message);
-        console.log('[mqtt-config] Intentando emitir fallo al cliente');
-
-        if (io) {
-            io.emit('system_fault', { source: 'MQTTBROKER', message: 'Conexión perdida con el Broker' });
-        }
-    });
-
-    // messages reception (gateway mqtt -> socket.io + MongoDB persistence)
-    client.on('message', async (topic, message) => {
-        try {
-            const payload = message.toString();
-            
-            // Log of receipted data
-            console.log(`[mqtt-config] Tópico: ${topic}, Payload: ${payload}`);
-
-            let savedData = null;
-            if (typeof persistHandler === 'function') {
-                try {
-                    savedData = await persistHandler(topic, payload);
-                } catch (serviceErr) {
-                    console.error('[mqtt-config] Error al persistir mensaje MQTT en DB:', serviceErr.message);
-                }
-            }
-
-            // io propagation - send to all web connected clients
-            if (io) {
-                io.emit('mqtt_update', { topic, payload, data: savedData });
-            }
-
-        } catch (e) {
-            console.error('Error al procesar mensaje MQTT:', e);
-        }
-    });
+    process();
+  };
 }
-
-/**
- * Publica un comando de control en el tópico MQTT.
- * @param {string} type - 'analogico'
- * @param {string} payload - El valor del comando (ej: '150' o '1').
- */
-
-function publishCommand(type, payload, options = {}) {
-    if (!client || !client.connected) {
-        console.error('[mqtt-config] No se puede publicar porque el cliente MQTT no está conectado.');
-        return false;
-    }
-
-    let topic;
-
-    // select topic
-    switch(type) {
-        case "analog":
-            topic = TOPICS.CMDANALOG;
-            break;
-        case "threshold":
-            topic = TOPICS.CMDTHRESHOLD;
-            break;
-        default:
-            console.log(`[mqtt-config] comando desconocido ${type}`);
-            return false;
-    }
-
-    // payload publish
-    client.publish(topic, String(payload), { qos: 0, retain: false, ...options }, (err) => {
-        if (err) {
-            console.log(`[mqtt-config] Error al publicar en ${topic}:`, err);
-        } else {
-            console.log(`[mqtt-config] Comando publicado: ${topic} -> ${payload}`);
-        }
-    });
-    return true;
+async function publishCommand(deviceId, message) {
+  const topic = commandTopic(deviceId);
+  if (!client?.connected) throw new Error('Broker AURA desconectado');
+  if (message.command !== 'set_config') throw new Error('Comando no soportado');
+  await new Promise((resolve, reject) => client.publish(topic, JSON.stringify(message),
+    { qos: 1, retain: false }, err => err ? reject(err) : resolve()));
+  return true;
 }
-
-export default {
-    init,
-    publishCommand
-}
+function isConnected() { return !!client?.connected; }
+export default { init, publishCommand, isConnected };

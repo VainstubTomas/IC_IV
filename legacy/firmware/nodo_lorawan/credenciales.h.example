@@ -1,0 +1,37 @@
+/*
+ * Credenciales OTAA del nodo — PLANTILLA
+ *
+ * Copiar a credenciales.h y completar con los valores que genera ChirpStack
+ * al dar de alta el dispositivo (pedírselas al docente).
+ * credenciales.h está en .gitignore: las claves NO se suben al repositorio.
+ *
+ * Dónde sacar cada valor en la web de ChirpStack:
+ *   Applications -> [tu app] -> Devices -> [tu device]
+ *     - DevEUI  : pestaña Configuration
+ *     - JoinEUI : pestaña Configuration (figura como "Join EUI")
+ *     - AppKey  : pestaña OTAA keys ("Application key")
+ *
+ * OJO con el orden de bytes: van en MSB (el mismo orden en que los muestra
+ * la web de ChirpStack, de izquierda a derecha).
+ */
+
+#ifndef CREDENCIALES_H
+#define CREDENCIALES_H
+
+// Identificadores del dispositivo (8 bytes cada uno, en MSB).
+static const uint64_t JOIN_EUI = 0x0000000000000000;
+static const uint64_t DEV_EUI  = 0x0000000000000000;
+
+// Clave de aplicación root (16 bytes, en MSB).
+// En LoRaWAN 1.0.x es la única que hace falta (Application key).
+static const uint8_t APP_KEY[] = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+// NOTA IMPORTANTE PARA LORAWAN 1.0.x:
+// No declarar NWK_KEY. RadioLib decide el modo LoRaWAN 1.1 si el puntero
+// nwkKey no es nulo, lo que rompería el join con el Device Profile 1.0.3 del aula.
+// nodo_lorawan.ino pasa nullptr en ese argumento a propósito.
+
+#endif  // CREDENCIALES_H

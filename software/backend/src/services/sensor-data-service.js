@@ -1,3 +1,5 @@
+import config from "../config/config.js";
+import { parseAuraData, isDeviceId } from "../config/mqtt/aura-protocol.js";
 import sensorDataRepository from "../repository/sensor-data-repository.js";
 import alertService from "./alert-service.js";
 
@@ -15,126 +17,109 @@ class SensorDataService {
   /**
    * Guarda una nueva lectura de telemetría validada
    */
-  async saveTelemetry({ temperature, temperatura, rssi, deviceId = "Heladera1", source = "http" }) {
+  async saveTelemetry({ temperature, temperatura, rssi, deviceId = config.AURA_DEVICE_ID, source = "http", ingest_id, measuredAt, powerCutAt, powerFirst, onBattery }) {
+    if (!isDeviceId(deviceId)) throw new Error("Se requiere UUID AURA del dispositivo");
     // Aceptar tanto 'temperature' como 'temperatura'
     const tempVal = temperature !== undefined ? Number(temperature) : Number(temperatura);
     
-    if (isNaN(tempVal)) {
+    if (temperature === null || temperatura === null || !Number.isFinite(tempVal)) {
       throw new Error("El valor de temperatura debe ser un número válido.");
     }
 
     const rssiVal = rssi !== undefined && rssi !== null && !isNaN(Number(rssi)) ? Number(rssi) : null;
 
-    const record = await sensorDataRepository.create({
+    const { record, inserted } = await sensorDataRepository.create({
       temperature: tempVal,
       rssi: rssiVal,
-      deviceId: deviceId || "Heladera1",
-      source
+      deviceId,
+      source,
+      ...(measuredAt ? { measuredAt } : {}),
+      ...(powerCutAt ? { powerCutAt } : {}),
+      ...(powerFirst !== undefined ? { powerFirst } : {}),
+      ...(onBattery !== undefined ? { onBattery } : {}),
+      ...(ingest_id !== undefined ? { ingest_id } : {})
     });
 
     // Chequeo de umbral no bloqueante: un fallo de mail/DB acá nunca debe romper el guardado.
-    alertService
+    if (inserted) alertService
       .checkThresholdAndNotify({ deviceId: record.deviceId, temperature: record.temperature })
       .catch((err) => console.error("[sensor-service] Error al chequear umbrales:", err.message));
 
     return {
       id: record._id,
+      ingest_id: record.ingest_id,
+      duplicate: !inserted,
       temperatura: record.temperature,
       temperature: record.temperature,
       rssi: record.rssi,
       deviceId: record.deviceId,
       timestamp: formatTimestamp(record.createdAt),
       createdAt: record.createdAt
+      ,measuredAt: record.measuredAt, powerCutAt: record.powerCutAt, powerFirst: record.powerFirst, onBattery: record.onBattery
     };
   }
 
   /**
    * Obtiene la última lectura registrada
    */
-  async getLatestTelemetry() {
-    const latest = await sensorDataRepository.getLatest();
+  async getLatestTelemetry(sensor = 'heladera') {
+    if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
+    // El codec LoRaWAN archivado solo define una sonda.
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : null;
+    if (!isDeviceId(deviceId)) return null;
+    const latest = await sensorDataRepository.getLatest(deviceId);
 
     if (!latest) {
-      return {
-        temperatura: 3.8,
-        temperature: 3.8,
-        rssi: -75,
-        deviceId: "Heladera1",
-        timestamp: formatTimestamp(new Date()),
-        isInitialDefault: true
-      };
+      return null;
     }
 
     return {
       id: latest._id,
+      ingest_id: latest.ingest_id,
       temperatura: latest.temperature,
       temperature: latest.temperature,
-      rssi: latest.rssi ?? -80,
+      rssi: latest.rssi ?? null,
       deviceId: latest.deviceId,
       timestamp: formatTimestamp(latest.createdAt),
       createdAt: latest.createdAt
+      ,measuredAt: latest.measuredAt, powerCutAt: latest.powerCutAt, powerFirst: latest.powerFirst, onBattery: latest.onBattery
     };
   }
 
   /**
    * Obtiene el listado histórico de lecturas
    */
-  async getTelemetryHistory(limit = 50) {
-    const records = await sensorDataRepository.getHistory(limit);
+  async getTelemetryHistory(limit = 50, sensor = 'heladera') {
+    if (!['heladera','freezer'].includes(sensor)) throw new Error('Sonda no valida');
+    // El codec LoRaWAN archivado solo define una sonda.
+    const deviceId = sensor === 'heladera' ? config.AURA_DEVICE_ID : null;
+    if (!isDeviceId(deviceId)) return [];
+    const records = await sensorDataRepository.getHistory(limit, deviceId);
     return records.map((r) => ({
       id: r._id,
+      ingest_id: r.ingest_id,
       temperatura: r.temperature,
       temperature: r.temperature,
       rssi: r.rssi,
       deviceId: r.deviceId,
       timestamp: formatTimestamp(r.createdAt),
       createdAt: r.createdAt
+      ,measuredAt: r.measuredAt, powerCutAt: r.powerCutAt, powerFirst: r.powerFirst, onBattery: r.onBattery
     }));
   }
 
   /**
-   * Parsea e ingesta automáticamente mensajes recibidos desde el Broker MQTT
-   * Soporta formato de texto de firmware ("Heladera1:4.20") o JSON ("{"temperature": 4.2}")
+   * Ingesta mediciones values.temp_c del broker AURA; UUID siempre desde el topico.
    */
   async parseAndSaveMqttMessage(topic, payloadStr) {
-    try {
-      let parsedTemp = null;
-      let parsedRssi = null;
-      let parsedDevice = "Heladera1";
-
-      const trimmed = payloadStr.trim();
-
-      // Caso 1: Formato JSON
-      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-        const json = JSON.parse(trimmed);
-        parsedTemp = json.temperature ?? json.temperatura ?? json.temp;
-        parsedRssi = json.rssi ?? json.signal;
-        parsedDevice = json.deviceId ?? json.device ?? "Heladera1";
-      } 
-      // Caso 2: Formato texto de firmware ESP32 "Heladera1:3.85" o "3.85"
-      else if (trimmed.includes(":")) {
-        const parts = trimmed.split(":");
-        parsedDevice = parts[0] || "Heladera1";
-        parsedTemp = parseFloat(parts[1]);
-      } else {
-        parsedTemp = parseFloat(trimmed);
-      }
-
-      if (parsedTemp !== null && !isNaN(parsedTemp)) {
-        const saved = await this.saveTelemetry({
-          temperature: parsedTemp,
-          rssi: parsedRssi,
-          deviceId: parsedDevice,
-          source: "mqtt"
-        });
-        console.log(`[sensor-service] 💾 Telemetría MQTT persistida en DB: ${parsedDevice} -> ${parsedTemp}°C`);
-        return saved;
-      }
-    } catch (err) {
-      console.error("[sensor-service] Error procesando payload MQTT:", err.message);
-    }
-    return null;
+    let reading;
+    try { reading = parseAuraData(topic, payloadStr); }
+    catch (err) { console.warn('[sensor-service] Payload AURA rechazado:', err.message); return null; }
+    if (reading && config.AURA_DEVICE_ID && reading.deviceId!==config.AURA_DEVICE_ID) return null;
+    // Errores de DB se propagan: no confirmar MQTT antes de persistir.
+    return reading ? await this.saveTelemetry(reading) : null;
   }
+
 }
 
 export default new SensorDataService();

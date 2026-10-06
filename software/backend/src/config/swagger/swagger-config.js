@@ -20,7 +20,7 @@ const options = {
                 type: "object",
                 properties: {
                 id: { type: "string" },
-                deviceId: { type: "string", example: "Heladera1" },
+                deviceId: { type: "string", example: "650e8400-e29b-41d4-a716-446655440001" },
                 temperature: { type: "number", example: -18.5 },
                 rssi: { type: "number", nullable: true },
                 source: { type: "string", enum: ["lora", "mqtt", "http", "manual"] },
@@ -30,7 +30,7 @@ const options = {
             Threshold: {
                 type: "object",
                 properties: {
-                deviceId: { type: "string", example: "Heladera1" },
+                deviceId: { type: "string", example: "650e8400-e29b-41d4-a716-446655440001" },
                 min: { type: "number" },
                 max: { type: "number" }
                 }

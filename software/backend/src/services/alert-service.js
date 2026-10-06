@@ -14,16 +14,16 @@ class AlertService {
    * envía un mail a todos los emails de alerta registrados.
    * @param {{deviceId: string, temperature: number}} reading
    */
-  async checkThresholdAndNotify({ deviceId, temperature }) {
-    const thresholds = await thresholdService.getThresholds(deviceId);
+  async checkThresholdAndNotify({ deviceId, temperature, sensor = "heladera" }) {
+    const thresholds = await thresholdService.getThresholds(deviceId,sensor);
     if (!thresholds.configured) return;
 
     let currentState = "normal";
     if (temperature > thresholds.max) currentState = "alta";
     else if (temperature < thresholds.min) currentState = "baja";
 
-    const previousState = this.lastAlertState.get(deviceId) || "normal";
-    this.lastAlertState.set(deviceId, currentState);
+    const previousState = this.lastAlertState.get(deviceId+":"+sensor) || "normal";
+    this.lastAlertState.set(deviceId+":"+sensor, currentState);
 
     // Solo notificar si hay una alerta nueva (cambio de estado, y no es "normal")
     if (currentState === "normal" || currentState === previousState) return;
@@ -35,10 +35,10 @@ class AlertService {
     }
 
     const subject = currentState === "alta"
-      ? `⚠️ Alerta: temperatura alta en ${deviceId}`
-      : `⚠️ Alerta: temperatura baja en ${deviceId}`;
+      ? `⚠️ Alerta: temperatura alta en ${deviceId} (${sensor})`
+      : `⚠️ Alerta: temperatura baja en ${deviceId} (${sensor})`;
 
-    const text = `El dispositivo "${deviceId}" registró ${temperature}°C, fuera del rango configurado ` +
+    const text = `La sonda ${sensor} del dispositivo "${deviceId}" registró ${temperature}°C, fuera del rango configurado ` +
       `(mínimo: ${thresholds.min}°C, máximo: ${thresholds.max}°C).`;
 
     console.log(`[alert-service] Umbral cruzado (${previousState} -> ${currentState}), notificando a ${recipients.length} email(s)`);

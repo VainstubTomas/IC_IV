@@ -13,8 +13,8 @@ const router = Router();
  *       - name: deviceId
  *         in: query
  *         required: false
- *         description: Identificador del dispositivo (por defecto "Heladera1")
- *         schema: { type: string, example: Heladera1 }
+ *         description: UUID del dispositivo; por defecto el de heladera configurado
+ *         schema: { type: string, example: 650e8400-e29b-41d4-a716-446655440001 }
  *     responses:
  *       200:
  *         description: Umbral vigente
@@ -41,7 +41,7 @@ router.get("/umbrales", thresholdController.getThresholds);
  *             type: object
  *             required: [min, max]
  *             properties:
- *               deviceId: { type: string, example: Heladera1 }
+ *               deviceId: { type: string, example: 650e8400-e29b-41d4-a716-446655440001 }
  *               min: { type: number, example: -25 }
  *               max: { type: number, example: -15 }
  *     responses:

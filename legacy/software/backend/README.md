@@ -1,0 +1,1 @@
+Archivo del reporte de cortes propuesto antes del contrato v3. No se importa ni ejecuta en el backend actual. AURA v3 usa alerts/<UUID>/energia. Se conserva como referencia histórica; sus imports correspondían a la ubicación anterior.

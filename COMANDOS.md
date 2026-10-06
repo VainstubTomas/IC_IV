@@ -1,73 +1,45 @@
-# Comandos útiles - IC_IV
+# Comandos de IC IV
 
-## 1. Conectarse a la base de datos (MongoDB)
+Desde la raíz del repositorio, para el banco local:
 
-La base corre en el contenedor Docker `iciv_mongodb`, base de datos `iciv_db`.
-
-```bash
-docker exec -it iciv_mongodb mongosh iciv_db
+```powershell
+docker compose up -d
+docker compose ps
 ```
 
-Alternativa, si tenés `mongosh` instalado localmente:
+Backend:
 
-```bash
-mongosh "mongodb://localhost:27017/iciv_db"
+```powershell
+cd software/backend
+npm ci
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+# Completar .env antes de iniciar
+npm start
 ```
 
-Dentro del shell, confirmar la base y ver las colecciones:
+Desde la misma carpeta, pruebas:
 
-```js
-use iciv_db
-show collections
+```powershell
+npm test
 ```
 
-## 2. Buscar registros existentes
+Desde la raíz, regenerar las copias de sala y gateway para Arduino IDE (el nodo
+no se regenera: `dispositivos/E1-PB-LECA-HFR01/` es su fuente):
 
-La colección de telemetría es `sensordatas` (nombre generado por Mongoose a partir del modelo `SensorData`).
-
-```js
-// Contar cuántos registros hay
-db.sensordatas.countDocuments()
-
-// Ver todos los registros
-db.sensordatas.find().pretty()
-
-// Ver los últimos 10, más reciente primero
-db.sensordatas.find().sort({ createdAt: -1 }).limit(10)
-
-// Filtrar por dispositivo
-db.sensordatas.find({ deviceId: "Heladera1" })
-
-// Ver solo el último registro
-db.sensordatas.find().sort({ createdAt: -1 }).limit(1)
+```powershell
+python herramientas/arduino/generar_mesh_monolitico.py
 ```
 
-## 3. Formato JSON para POST a la API (Insomnia / Postman / curl)
+Detener backend con Ctrl+C. Desde la raíz:
 
-**Endpoint:** `POST http://localhost:8080/api/v1/telemetria`
-**Header:** `Content-Type: application/json`
-
-**Body (todos los campos salvo `temperature` son opcionales):**
-
-```json
-{
-  "deviceId": "Heladera1",
-  "temperature": 4.2,
-  "rssi": -65,
-  "source": "manual"
-}
+```powershell
+docker compose down
 ```
 
-Notas de los campos:
-- `temperature` (o alternativamente `temperatura`): número, **obligatorio**.
-- `deviceId`: string, default `"Heladera1"` si se omite.
-- `rssi`: número, default `null` si se omite.
-- `source`: uno de `"lora" | "mqtt" | "http" | "manual"`, default `"http"` si se omite.
+Dashboard: http://localhost:8080/. Swagger: http://localhost:8080/api-docs.
+Ajustar URLs si cambia SERVERPORT. Configuración de hardware/AURA y guía de
+cortes/reintentos: [MESH_INTEGRACION.md](MESH_INTEGRACION.md).
 
-Equivalente con `curl`:
-
-```bash
-curl -X POST http://localhost:8080/api/v1/telemetria \
-  -H "Content-Type: application/json" \
-  -d '{"deviceId": "Heladera1", "temperature": 4.2, "rssi": -65, "source": "manual"}'
-```
+Pruebas C++ (con make/g++): `make -C dispositivos/E1-PB-LECA-HFR01/tests`
+(o `make -C tests/firmware/host`, que las delega).
+Entrega AURA y migración de NVS: consultar MESH_INTEGRACION antes de flashear.

@@ -1,5 +1,7 @@
-import sensorDataService from "../services/sensor-data-service.js";
-import mqttConfig from "../config/mqtt/mqtt-config.js";
+import legacyDataService from "../services/sensor-data-service.js";
+import meshDataService from "../services/mesh-data-service.js";
+import config from "../config/config.js";
+const sensorDataService=config.ICIV_TRANSPORT==='mesh'?meshDataService:legacyDataService;
 
 class SensorDataController {
   /**
@@ -8,7 +10,7 @@ class SensorDataController {
    */
   async postTelemetry(req, res) {
     try {
-      const { temperatura, temperature, rssi, deviceId, source } = req.body || {};
+      const { temperatura, temperature, rssi, deviceId, source, sensor } = req.body || {};
 
       const tempToUse = temperature !== undefined ? temperature : temperatura;
 
@@ -22,7 +24,7 @@ class SensorDataController {
       const result = await sensorDataService.saveTelemetry({
         temperature: tempToUse,
         rssi,
-        deviceId,
+        deviceId, sensor,
         source: source || "http"
       });
 
@@ -46,7 +48,7 @@ class SensorDataController {
    */
   async getLatestTelemetry(req, res) {
     try {
-      const latest = await sensorDataService.getLatestTelemetry();
+      const latest = await sensorDataService.getLatestTelemetry(req.query.sensor || 'heladera');
       return res.status(200).json(latest);
     } catch (error) {
       console.error("[controller] Error en getLatestTelemetry:", error);
@@ -64,7 +66,7 @@ class SensorDataController {
   async getHistory(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 50;
-      const history = await sensorDataService.getTelemetryHistory(limit);
+      const history = await sensorDataService.getTelemetryHistory(limit,req.query.sensor || 'heladera');
       return res.status(200).json({
         status: "success",
         count: history.length,
@@ -84,25 +86,7 @@ class SensorDataController {
    * Forzar lectura inmediata enviando comando MQTT hacia el nodo
    */
   async forceRead(req, res) {
-    try {
-      const published = mqttConfig.publishCommand("analog", "force_read");
-
-      // Consultar la última lectura para responder
-      const latest = await sensorDataService.getLatestTelemetry();
-
-      return res.status(200).json({
-        status: "ok",
-        mensaje: "Comando de lectura forzada emitido",
-        mqttSent: published,
-        telemetria: latest
-      });
-    } catch (error) {
-      console.error("[controller] Error en forceRead:", error);
-      return res.status(500).json({
-        status: "error",
-        message: "Error al forzar la lectura del dispositivo"
-      });
-    }
+    return res.status(409).json({ message: 'La lectura se realiza segun el intervalo propio de cada sonda. Comando de lectura forzada no definido.' });
   }
 
   /**

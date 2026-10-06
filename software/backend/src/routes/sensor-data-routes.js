@@ -39,7 +39,7 @@ router.get("/health", sensorDataController.healthCheck);
  *             required: [temperature]
  *             properties:
  *               temperature: { type: number, example: -18.2 }
- *               deviceId: { type: string, example: Heladera1 }
+ *               deviceId: { type: string, example: 650e8400-e29b-41d4-a716-446655440001 }
  *               rssi: { type: number }
  *               source: { type: string, enum: [lora, mqtt, http, manual] }
  *     responses:

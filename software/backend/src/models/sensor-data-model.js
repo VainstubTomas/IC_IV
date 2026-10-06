@@ -4,9 +4,15 @@ const sensorDataSchema = new mongoose.Schema(
   {
     deviceId: { 
       type: String, 
-      default: "Heladera1",
+      required: true,
       trim: true 
     },
+    ingest_id: { type: String },
+    measuredAt: { type: Date },
+    orderAt: { type: Date, default: Date.now },
+    powerCutAt: { type: Date },
+    powerFirst: { type: Boolean, default: false },
+    onBattery: { type: Boolean },
     temperature: { 
       type: Number, 
       required: [true, "La temperatura es requerida"] 
@@ -36,7 +42,11 @@ const sensorDataSchema = new mongoose.Schema(
   }
 );
 
+// Deduplicacion persistente: campos opcionales ausentes no participan del indice.
+sensorDataSchema.index({ ingest_id: 1 }, { unique: true, partialFilterExpression: { ingest_id: { $type: "string" } } });
+
 // Índice compuesto para acelerar consultas del último registro
 sensorDataSchema.index({ createdAt: -1 });
+sensorDataSchema.index({ deviceId: 1, orderAt: -1 });
 
 export default mongoose.model("SensorData", sensorDataSchema);
