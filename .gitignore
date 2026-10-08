@@ -42,3 +42,20 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Nuevos tests/artefactos de AURA v4
+dispositivos/*/tests/test_envio
+dispositivos/*/tests/test_config_json
+comun/tests/test_*
+!comun/tests/test_*.cpp
+!comun/tests/test_*.h
+*.pdb
+
+# Banco archivado y sus artefactos locales
+legacy/banco_v3/mosquitto/data/
+legacy/banco_v3/mosquitto/log/
+legacy/banco_v3/tests/firmware/host/test_ingest
+legacy/banco_v3/tests/firmware/host/*.exe
+legacy/firmware/nodo_mesh_v3/tests/test_mesh
+legacy/firmware/nodo_mesh_v3/tests/test_storage
+legacy/firmware/nodo_mesh_v3/tests/*.exe

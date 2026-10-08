@@ -1,0 +1,31 @@
+{
+  "origen": "https://github.com/Universidad-Nacional-de-Rafaela/aura-firmware",
+  "contrato": "4.0 (propuesta), 2026-10-07",
+  "sdk": "1.0.0",
+  "nota": "Dependencias copiadas sin cambios. Revisar upstream antes del PR; no copiar comun/ al fork.",
+  "sha256": {
+    "comun/buffer_circular.h": "bc5d5ee9c229c5fd36d77a13503a45a76ace307651aeda8f71f031ea35446d45",
+    "comun/cola_persistente.h": "3fdad7f646c5ce80dfdfdc889f6206da50e06ee1f1c86c83883d3282e688b432",
+    "comun/ingest_id.h": "b9b3372bcd5fdd994e22ffdd6e81a5836210185f39e969f16725d69194d7d8fd",
+    "comun/nodo_mesh.h": "ed85e9c7f7c3ecf9dacfb17b6671f54cba53948e94e7bebc59a58b296de9e105",
+    "comun/nodo_mesh_logica.h": "cacedbaddd0c75004d7b294522d14591ce0f784a7ab13911cecc02e015e2bf84",
+    "comun/protocolo_aura.h": "c04b63bf09c59410ed3bb092dbc7e01536dde01b5ca318000755836ff2913a41",
+    "comun/radio_wifi_mesh.h": "95ba2b0aba4bd54c45989fe6a63bfd77901de49f8cbf3a10ebd962a968220ac6",
+    "comun/tests/aserciones.h": "f25511a942356f8c85dff77cb64f4bb7b4f9dc48fef78b2e3e56df574ace7df3",
+    "comun/tests/Makefile": "f740bff3a024c6b923fba3956fbc35868fe86a137a72ecc74bcc516360f4d6a4",
+    "comun/tests/test_buffer.cpp": "1586fa474f24d2a53f68fbfe8f4252e7c0bedbc2166aab1b0b49bd9b087c7c3c",
+    "comun/tests/test_cola.cpp": "789b760cc25295632b6eb117015f22667a42c1187a8a6877f6ffa4985ec252a0",
+    "comun/tests/test_ingest_id.cpp": "78c9e2568df2ad8f4f1797c67b08c51cbbc9de9259ff20d65abfb6e3e57e878d",
+    "comun/tests/test_nodo_logica.cpp": "a24fbaa4370124f1acf6ad5d025293912648b82da62a148f760f60fe8f3bd6b1",
+    "comun/tests/test_protocolo.cpp": "24ab9d92410cd4d5d6f34e920a39cbd8642f2f8e46718b6279a7e82fa79c255a",
+    "comun/python/aura_sdk/cargar.py": "3003a7dc4ebea5e345220b3e642b26b7d6c520cf4a233fabf324348bfc2094b2",
+    "comun/python/aura_sdk/conector.py": "7abd7f4cbfd3b5d5640410ae78bd91c3ac3fc95ae3cb1617a56ffc2a87a4ee21",
+    "comun/python/aura_sdk/contexto.py": "222d9eb4a074207c9835b314975ba557ef018b2352d8a0cd531f07b4153115e3",
+    "comun/python/aura_sdk/contrato.py": "fd83b768b6bf1fcc58ac2ac3dfc60a15525da44e84a9509384618a894ef81a72",
+    "comun/python/aura_sdk/ejecutar.py": "bd8d09a52988e295de6df5c8870cf302ad47b7f1558b35189533d87c9f3241a3",
+    "comun/python/aura_sdk/manifiesto.py": "e9026f827790634a8251fca77e4830327114e52605ea588709bf376808788067",
+    "comun/python/aura_sdk/mensaje.py": "f23cf9cee68c52619ea5fb7cdd953a3f8762670b88b241b72c3ed42a34b94d98",
+    "comun/python/aura_sdk/__init__.py": "a2b851e3a6662223dd2c0d29ac41e28caf3061cc8999449d4e4a22cfb4cad733",
+    "comun/python/tests/test_aura_sdk.py": "520bb09658dc53a3773a73d423c2f350ae0603518837e1424aeee02012b331ef"
+  }
+}
